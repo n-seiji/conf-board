@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+*.log
+.DS_Store
+
+# 設計キャンバス・使い捨てプロトタイプ (コミットしない)
+design-canvas/
+prototypes/
