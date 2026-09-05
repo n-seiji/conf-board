@@ -3,7 +3,7 @@ import type { Post } from "../shared/types";
 import type { GlobeHandle } from "./index";
 
 /** 画面上に同時に表示する吹き出しの最大数。 */
-const MAX_BUBBLES = 6;
+const MAX_BUBBLES = 8;
 /**
  * 吹き出しの最大寿命 (ms)。通常は「非表示になった」「dot が閾値を割った」タイミングで
  * fadeOutAndRemove するが、それが何らかの理由で効かなかった場合の安全弁として、
@@ -85,28 +85,89 @@ export const shouldEndCallout = (
   return projectedDot < endDot;
 };
 
+/** 吹き出しがピンに対してどちら側に配置されるか。 */
+export type Side = "top" | "left" | "right" | "bottom";
+
+/** side を試す固定順序 (優先する側を先頭にする)。 */
+const FIXED_SIDE_ORDER: readonly Side[] = ["top", "left", "right", "bottom"];
+
 /**
- * ピン座標を基準に吹き出しの矩形を計算する。ピンの真上、水平中央に配置するのが基本だが、
- * 上端が overlay の外にはみ出す場合は下側に配置し (`placeBelow: true`)、水平方向は
- * overlay の内側に収まるようクランプする。
+ * ピンの水平位置から、優先して試す side を決める。球の中心から遠ざかる向き
+ * (中心より左のピンは左、それ以外は右) を優先することで、吹き出しが球の周りに
+ * 放射状に広がり、球本体が隠れにくくなる。
  */
-export const bubbleRectFor = (
+export const preferredSideFor = (pinX: number, globeCenterX: number): Side =>
+  pinX < globeCenterX ? "left" : "right";
+
+/** `preferred` を先頭にした、試す順序の side 配列を返す。 */
+const sideOrder = (preferred: Side): readonly Side[] => [
+  preferred,
+  ...FIXED_SIDE_ORDER.filter((side) => side !== preferred),
+];
+
+/** 指定した side でのピン基準の矩形を計算する (自由軸方向のみ overlay 内にクランプする)。 */
+const rectForSide = (
+  side: Side,
   pinX: number,
   pinY: number,
   width: number,
   height: number,
   gap: number,
-  overlayRect: Readonly<{ width: number; height: number }>,
-): Readonly<{ rect: Rect; placeBelow: boolean }> => {
-  const aboveTop = pinY - gap - height;
-  const placeBelow = aboveTop < 0;
-  const top = placeBelow ? pinY + gap : aboveTop;
+  overlaySize: Readonly<{ width: number; height: number }>,
+): Rect => {
+  if (side === "top" || side === "bottom") {
+    const top = side === "top" ? pinY - gap - height : pinY + gap;
+    let left = pinX - width / 2;
+    if (left < 0) left = 0;
+    if (left + width > overlaySize.width) left = overlaySize.width - width;
+    return { left, top, width, height };
+  }
+  const left = side === "left" ? pinX - gap - width : pinX + gap;
+  let top = pinY - height / 2;
+  if (top < 0) top = 0;
+  if (top + height > overlaySize.height) top = overlaySize.height - height;
+  return { left, top, width, height };
+};
 
-  let left = pinX - width / 2;
-  if (left < 0) left = 0;
-  if (left + width > overlayRect.width) left = overlayRect.width - width;
+/** side の矩形が、クランプしない主軸方向で overlay 内に収まっているかどうか。 */
+const fitsMainAxis = (
+  side: Side,
+  rect: Rect,
+  overlaySize: Readonly<{ width: number; height: number }>,
+): boolean => {
+  if (side === "top") return rect.top >= 0;
+  if (side === "bottom") return rect.top + rect.height <= overlaySize.height;
+  if (side === "left") return rect.left >= 0;
+  return rect.left + rect.width <= overlaySize.width;
+};
 
-  return { rect: { left, top, width, height }, placeBelow };
+/**
+ * ピンの周囲 4 方向 (`top`/`left`/`right`/`bottom`) のうち、既存の吹き出しと重ならず
+ * overlay 内に収まる最初の side を選んで矩形を返す純粋関数。`preferredSide` を最初に
+ * 試し、それ以外は `top`→`left`→`right`→`bottom` の固定順で試す。左右方向はピンの
+ * 高さ中央に、上下方向は幅中央に揃え、自由軸 (左右なら縦、上下なら横) は overlay 内に
+ * クランプする。どの side も (主軸方向に収まらない、または既存の吹き出しと重なる)
+ * 条件で使えない場合は null を返す。
+ */
+export const placeBubble = (
+  pinX: number,
+  pinY: number,
+  size: Readonly<{ width: number; height: number }>,
+  gap: number,
+  overlaySize: Readonly<{ width: number; height: number }>,
+  existingRects: readonly Rect[],
+  preferredSide: Side,
+): Readonly<{ rect: Rect; side: Side }> | null => {
+  for (const side of sideOrder(preferredSide)) {
+    const rect = rectForSide(side, pinX, pinY, size.width, size.height, gap, overlaySize);
+    if (!fitsMainAxis(side, rect, overlaySize)) continue;
+    const expanded = expandRect(rect, OVERLAP_MARGIN_PX);
+    const overlaps = existingRects.some((existing) =>
+      rectsIntersect(expanded, expandRect(existing, OVERLAP_MARGIN_PX)),
+    );
+    if (!overlaps) return { rect, side };
+  }
+  return null;
 };
 
 /** 2 つの矩形が重なっているかどうかを判定する。 */
@@ -159,14 +220,18 @@ export type RefillCandidate = Readonly<{
 
 /**
  * 空いている 1 枠をリフィルする候補を、プール内の投稿から 1 件選ぶ純粋関数。
- * 対象は「表示中」「まだカードが無い」「dot が `REFILL_MIN_DOT` 以上」のもの。加えて、画面右半分 (`x >= globeCenterX`、overlay 基準、
- * これから縁へ流れていく途中) のピンは `REFILL_MIN_DOT_RIGHT_HALF` 未満 (まもなく
- * 縁を越える) を除外する (追加してすぐ消えるカードを避けるため)。
- * また、吹き出しを置いたと仮定した矩形 (`ESTIMATED_BUBBLE_W/H` でピン直上に見積もる) が
- * 既存のいずれかの吹き出しと重なる候補は除外する (重なり回避)。
- * さらに、`lastShownAt` から `RESHOW_COOLDOWN_MS` (3秒) 未満しか経っていない
- * (吹き出しが消えたばかりの) ピンも除外する (同じピンがすぐ再登場するのを防ぐ)。
+ * 対象は「表示中」「まだカードが無い」「dot が `REFILL_MIN_DOT` 以上」のもの。加えて、
+ * 画面右半分 (`x >= globeCenterX`、overlay 基準、これから縁へ流れていく途中) のピンは
+ * `REFILL_MIN_DOT_RIGHT_HALF` 未満 (まもなく縁を越える) を除外する
+ * (追加してすぐ消えるカードを避けるため)。さらに、`lastShownAt` から
+ * `RESHOW_COOLDOWN_MS` (3秒) 未満しか経っていない (吹き出しが消えたばかりの) ピンも
+ * 除外する (同じピンがすぐ再登場するのを防ぐ)。
+ * 残った候補それぞれについて `placeBubble` (`ESTIMATED_BUBBLE_W/H` で見積もった
+ * サイズ、優先 side はピンの水平位置から `preferredSideFor` で決める) を試し、
+ * 置き場所が無い (どの side も既存の吹き出しと重なる) 候補は除外する。
  * 優先順位は投稿の新しい順 (`createdAt` 降順) のみ。該当が無ければ null を返す。
+ * 見つかった場合は、選んだ投稿の id と、そのために決まった side を返す
+ * (実際の配置でも同じ side を使うことで、見積もりと実配置の side がずれないようにする)。
  */
 export const pickRefillCandidate = (
   candidates: readonly RefillCandidate[],
@@ -174,35 +239,36 @@ export const pickRefillCandidate = (
   overlaySize: Readonly<{ width: number; height: number }>,
   existingRects: readonly Rect[],
   now: number,
-): string | null => {
-  const eligible = candidates.filter((candidate) => {
-    if (candidate.hasCard || !candidate.visible) return false;
-    if (candidate.projectedX === null || candidate.projectedY === null) return false;
-    if (candidate.dot < REFILL_MIN_DOT) return false;
+): Readonly<{ id: string; side: Side }> | null => {
+  const eligible: Array<{ candidate: RefillCandidate; side: Side }> = [];
+  for (const candidate of candidates) {
+    if (candidate.hasCard || !candidate.visible) continue;
+    if (candidate.projectedX === null || candidate.projectedY === null) continue;
+    if (candidate.dot < REFILL_MIN_DOT) continue;
     if (candidate.projectedX >= globeCenterX && candidate.dot < REFILL_MIN_DOT_RIGHT_HALF) {
-      return false;
+      continue;
     }
     if (candidate.lastShownAt !== null && now - candidate.lastShownAt < RESHOW_COOLDOWN_MS) {
-      return false;
+      continue;
     }
-    // 尻尾 (ピンとの隙間) の分も矩形に含めて見積もる (BUBBLE_GAP_PX 分だけ縦に拡張)。
-    const { rect } = bubbleRectFor(
+    const preferred = preferredSideFor(candidate.projectedX, globeCenterX);
+    // 尻尾 (ピンとの隙間) の分も見積もりサイズに含める (BUBBLE_GAP_PX 分だけ縦に拡張)。
+    const placement = placeBubble(
       candidate.projectedX,
       candidate.projectedY,
-      ESTIMATED_BUBBLE_W,
-      ESTIMATED_BUBBLE_H + BUBBLE_GAP_PX,
+      { width: ESTIMATED_BUBBLE_W, height: ESTIMATED_BUBBLE_H + BUBBLE_GAP_PX },
       BUBBLE_GAP_PX,
       overlaySize,
+      existingRects,
+      preferred,
     );
-    const expanded = expandRect(rect, OVERLAP_MARGIN_PX);
-    return !existingRects.some((existing) =>
-      rectsIntersect(expanded, expandRect(existing, OVERLAP_MARGIN_PX)),
-    );
-  });
+    if (!placement) continue;
+    eligible.push({ candidate, side: placement.side });
+  }
   if (eligible.length === 0) return null;
 
-  const best = [...eligible].sort((a, b) => b.createdAt - a.createdAt)[0];
-  return best?.id ?? null;
+  const best = [...eligible].sort((a, b) => b.candidate.createdAt - a.candidate.createdAt)[0];
+  return best ? { id: best.candidate.id, side: best.side } : null;
 };
 
 type CalloutEntry = {
@@ -210,6 +276,8 @@ type CalloutEntry = {
   readonly createdAt: number;
   readonly shownAt: number;
   readonly card: HTMLDivElement;
+  /** 作成時に決めた側。ピンに追従する間もずっと同じ側を使い、再判定はしない。 */
+  readonly side: Side;
   fadeTimer: ReturnType<typeof setTimeout> | null;
   /** フェードアウト CSS 完了後に removeEntry するための内側の setTimeout。 */
   hideTimer: ReturnType<typeof setTimeout> | null;
@@ -342,7 +410,11 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
     return { left, top, width: entry.size.width, height: entry.size.height };
   };
 
-  /** ピン位置に合わせてカードの style.left/top と上下配置クラスを更新する。 */
+  /**
+   * ピン位置に合わせてカードの style.left/top を更新する。side は作成時に決めた
+   * `entry.side` に固定し、ここでは再判定しない (毎フレーム side が変わって
+   * 吹き出しが飛び回るのを防ぐため)。自由軸方向のみ overlay 内にクランプする。
+   */
   const positionCard = (entry: CalloutEntry, pinX: number, pinY: number): void => {
     const overlayRect = overlay.getBoundingClientRect();
     if (!entry.size) {
@@ -351,7 +423,8 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
         height: entry.card.offsetHeight,
       };
     }
-    const { rect, placeBelow } = bubbleRectFor(
+    const rect = rectForSide(
+      entry.side,
       pinX,
       pinY,
       entry.size.width,
@@ -361,11 +434,11 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
     );
     entry.card.style.left = `${rect.left}px`;
     entry.card.style.top = `${rect.top}px`;
-    entry.card.classList.toggle("callout-card--below", placeBelow);
   };
 
-  const createEntry = (post: Post, isLatest: boolean): CalloutEntry => {
+  const createEntry = (post: Post, isLatest: boolean, side: Side): CalloutEntry => {
     const card = createCard(post, isLatest);
+    card.classList.add(`callout-card--${side}`);
     overlay.appendChild(card);
 
     const entry: CalloutEntry = {
@@ -373,6 +446,7 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
       createdAt: post.createdAt,
       shownAt: Date.now(),
       card,
+      side,
       fadeTimer: null,
       hideTimer: null,
       size: null,
@@ -402,6 +476,10 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
   };
 
   /** 新規投稿の到着時: 強調表示の吹き出しを追加する (既存があれば入れ替える)。 */
+  /** 現在の吹き出しの矩形一覧 (overlay 基準)。既存カードと重ならない配置先を選ぶのに使う。 */
+  const currentRects = (): Rect[] =>
+    [...entries.values()].map(rectOf).filter((rect): rect is Rect => rect !== null);
+
   const addCallout = (post: Post): void => {
     pool.set(post.id, post);
     const existing = entries.get(post.id);
@@ -412,7 +490,31 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
     }
 
     makeRoomIfFull();
-    createEntry(post, true);
+
+    const globeRect = globe.getBounds();
+    const overlayRect = overlay.getBoundingClientRect();
+    const globeCenterX = globeRect.left - overlayRect.left + globeRect.width / 2;
+    const projected = globe.projectPin(post.id);
+    let side: Side = "right";
+    if (projected) {
+      const pin = toOverlaySpace(projected.x, projected.y, globeRect, overlayRect);
+      const preferred = preferredSideFor(pin.x, globeCenterX);
+      const placement = placeBubble(
+        pin.x,
+        pin.y,
+        {
+          width: ESTIMATED_BUBBLE_W,
+          height: ESTIMATED_BUBBLE_H + BUBBLE_GAP_PX,
+        },
+        BUBBLE_GAP_PX,
+        { width: overlayRect.width, height: overlayRect.height },
+        currentRects(),
+        preferred,
+      );
+      // どの side も既存と重なる場合は、優先 side のまま出す (重なりは resolveOverlaps に任せる)。
+      side = placement?.side ?? preferred;
+    }
+    createEntry(post, true, side);
   };
 
   const refillOne = (globeRect: Rect): void => {
@@ -420,9 +522,7 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
     const overlayRect = overlay.getBoundingClientRect();
     // 候補の座標は既存の吹き出し矩形 (style.left/top = overlay 基準) と同じ座標系に揃える。
     const globeCenterX = globeRect.left - overlayRect.left + globeRect.width / 2;
-    const existingRects = [...entries.values()]
-      .map(rectOf)
-      .filter((rect): rect is Rect => rect !== null);
+    const existingRects = currentRects();
 
     const candidates: RefillCandidate[] = [...pool.values()].map((post) => {
       const projected = globe.projectPin(post.id);
@@ -441,18 +541,18 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
       };
     });
 
-    const chosenId = pickRefillCandidate(
+    const chosen = pickRefillCandidate(
       candidates,
       globeCenterX,
       { width: overlayRect.width, height: overlayRect.height },
       existingRects,
       Date.now(),
     );
-    if (!chosenId) return;
-    const post = pool.get(chosenId);
+    if (!chosen) return;
+    const post = pool.get(chosen.id);
     if (!post) return;
 
-    createEntry(post, false);
+    createEntry(post, false, chosen.side);
   };
 
   /**

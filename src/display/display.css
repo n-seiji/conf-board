@@ -62,34 +62,59 @@
   color: var(--ink);
   border-radius: 20px;
   box-shadow: var(--shadow-soft);
-  padding: 14px 18px 14px 24px;
+  padding: 18px 18px 14px 18px;
   transition: opacity 200ms ease;
   opacity: 1;
   overflow: visible;
 }
 
 /*
- * 漫画風の吹き出しの尻尾 (三角形)。既定はカード下端中央からピンを指す (上に配置)。
- * `--below` はピンの下に配置したケースで、尻尾を上端中央に付け替える。
+ * 漫画風の吹き出しの尻尾 (三角形)。ピンに対してどちら側に配置されたかで
+ * 尻尾の位置・向きを変える (`callout-card--top/left/right/bottom`)。
+ * アクセントバーは全方向で上端に置くため (`.callout-card::before`)、
+ * 尻尾と重ならない辺・位置を選んでいる。
  */
 .callout-card::after {
   content: "";
   position: absolute;
-  left: 50%;
-  bottom: -9px;
   width: 0;
   height: 0;
+}
+
+.callout-card--top::after {
+  left: 50%;
+  bottom: -9px;
   border-left: 9px solid transparent;
   border-right: 9px solid transparent;
   border-top: 10px solid var(--white);
   transform: translateX(-50%);
 }
 
-.callout-card--below::after {
-  bottom: auto;
+.callout-card--bottom::after {
+  left: 50%;
   top: -9px;
-  border-top: none;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
   border-bottom: 10px solid var(--white);
+  transform: translateX(-50%);
+}
+
+.callout-card--left::after {
+  right: -9px;
+  top: 50%;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 10px solid var(--white);
+  transform: translateY(-50%);
+}
+
+.callout-card--right::after {
+  left: -9px;
+  top: 50%;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-right: 10px solid var(--white);
+  transform: translateY(-50%);
 }
 
 /*
@@ -109,15 +134,18 @@
   font-size: calc(17px * 1.1);
 }
 
+/*
+ * アクセントバーは常に上端に置く (どの辺に尻尾が付いても衝突しないようにするため)。
+ * overflow: visible の下でも角丸からはみ出さないよう、カード本体と同じ半径を付ける。
+ */
 .callout-card::before {
   content: "";
   position: absolute;
   left: 0;
+  right: 0;
   top: 0;
-  bottom: 0;
-  width: 6px;
-  /* overflow: visible の下でも角丸からはみ出さないよう、カード本体と同じ半径を付ける。 */
-  border-radius: 20px 0 0 20px;
+  height: 6px;
+  border-radius: 20px 20px 0 0;
   background: var(--callout-accent, var(--mint-deep));
 }
 
