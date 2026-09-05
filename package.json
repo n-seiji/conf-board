@@ -1,0 +1,49 @@
+{
+  "name": "conf-board",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "check": "biome check . && tsc --noEmit && vitest run",
+    "gen:regions": "tsx scripts/gen-regions.ts && biome format --write src/globe/regions.json"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@cloudflare/vite-plugin": "^1.2.3",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@fontsource/m-plus-rounded-1c": "^5.1.1",
+    "@types/qrcode": "^1.5.5",
+    "@types/three": "^0.169.0",
+    "@types/topojson-client": "^3.1.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.7",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.4.0"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "three": "^0.169.0",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  },
+  "allowScripts": {
+    "@biomejs/biome@1.9.4": true,
+    "workerd@1.20260903.1": true,
+    "esbuild@0.25.4": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.1": true,
+    "sharp@0.33.5": true,
+    "sharp@0.35.2": true,
+    "fsevents@2.3.3": true,
+    "workerd@1.20260815.1": true
+  }
+}
