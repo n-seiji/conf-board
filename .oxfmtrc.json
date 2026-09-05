@@ -11,6 +11,7 @@
     "dist",
     ".wrangler",
     "node_modules",
-    "pnpm-lock.yaml"
+    "pnpm-lock.yaml",
+    ".playwright-mcp"
   ]
 }

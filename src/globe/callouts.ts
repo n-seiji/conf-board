@@ -2,18 +2,51 @@ import { pinColorHex } from "../shared/colors";
 import type { Post } from "../shared/types";
 import type { GlobeHandle } from "./index";
 
-const MAX_PER_COLUMN = 3;
+/** 画面上に同時に表示する吹き出しの最大数。 */
+const MAX_BUBBLES = 6;
 /**
- * 吹き出しの最大寿命 (ms)。球は 24 秒で 1 周するので、2nd phase (裏に隠れて表に戻る) が
- * 正常なら 24 秒程度で `shouldEndSecondPhase` により片付く。これはそれが何らかの理由で
- * 効かなかった場合の安全弁で、1 周 + 余裕分として 30 秒に設定している。
+ * 吹き出しの最大寿命 (ms)。通常は「非表示になった」「dot が閾値を割った」タイミングで
+ * fadeOutAndRemove するが、それが何らかの理由で効かなかった場合の安全弁として、
+ * 1 周 (24 秒) + 余裕分で 30 秒に設定している。
  */
 const MAX_LIFETIME_MS = 30_000;
 const HIDE_TRANSITION_MS = 200;
-/** 球の左右端から吹き出しを離すマージン (px)。 */
-const COLUMN_MARGIN = 40;
-/** 同じ列内のカード間の隙間 (px)。 */
-const COLUMN_GAP = 14;
+/** リフィル (空いた枠への補充) を試みる間隔 (ms)。 */
+const REFILL_INTERVAL_MS = 250;
+/** ピンが縁 (limb) に近づき、まもなく非表示になる dot。この値未満で吹き出しを終了する。 */
+const END_DOT = 0.3;
+/**
+ * 右半分 (`x >= globeCenterX`、これから縁へ流れていく途中) のピンをリフィル候補にする
+ * 最低 dot。左半分より高く設定し、残り表示時間が短い (縁まで秒単位) ピンだけを除外する。
+ */
+const REFILL_MIN_DOT_RIGHT_HALF = 0.75;
+/**
+ * 補充候補にする最低の dot (全候補共通)。`END_DOT` ちょうどで補充すると次のフレームで
+ * `shouldEndCallout` に消されて出た瞬間に消えるちらつきになるため、少し余裕を持たせる。
+ */
+const REFILL_MIN_DOT = 0.35;
+/** ピンの先端から吹き出しを離す隙間 (px)。 */
+const BUBBLE_GAP_PX = 14;
+/**
+ * 重なり判定・リフィル候補の事前チェックに使う吹き出しサイズの見積もり (px)。
+ * 実際の2行分の吹き出し (約260x99) より小さいと、補充直後に実サイズで重なりが
+ * 判定されてすぐ消えてしまう (churn) ため、余裕を持たせた値にしている。
+ */
+const ESTIMATED_BUBBLE_W = 260;
+const ESTIMATED_BUBBLE_H = 100;
+/** 吹き出し同士が接するのを避けるため、重なり判定の矩形を全方向に広げるマージン (px)。 */
+const OVERLAP_MARGIN_PX = 12;
+/**
+ * 補充されたばかりの吹き出しが誤って削除されないようにする最小経過時間 (ms)。
+ * この時間内の吹き出しは `resolveOverlaps` で「新しい方」として保護され、
+ * 重なった場合は代わりに古い方が消える。
+ */
+const MIN_AGE_BEFORE_OVERLAP_REMOVE_MS = 1500;
+/**
+ * 吹き出しが消えた (重なり解消・終了判定のいずれか) ピンを、再びリフィル対象にするまで
+ * 待つクールダウン時間 (ms)。同じピンが間を置かず何度も再登場するのを防ぐ。
+ */
+const RESHOW_COOLDOWN_MS = 3000;
 
 export type Rect = Readonly<{
   left: number;
@@ -24,9 +57,9 @@ export type Rect = Readonly<{
 
 /**
  * globe コンテナ (globeWrap) 基準のピン座標を、overlay (stage 全体) 基準の座標に変換する。
- * `projectPin` は globeWrap 基準、吹き出しカードと SVG は overlay (stage) 基準なので、
+ * `projectPin` は globeWrap 基準、吹き出しカードは overlay (stage) 基準なので、
  * globeWrap が stage 内でオフセットしている分 (見出し用の余白などによる) を補正しないと
- * リーダー線の端点がピンの位置からずれる。
+ * 吹き出しの位置がピンの位置からずれる。
  */
 export const toOverlaySpace = (
   pinX: number,
@@ -39,83 +72,161 @@ export const toOverlaySpace = (
 });
 
 /**
- * 中心付近の揺れを吸収するための許容幅 (px)。中心から左にこの距離未満のピンは
- * 「ほぼ中心」とみなし、右列 (最新扱い) に倒す。
+ * カードを終了 (フェードアウト) させるべきかどうかを判定する。
+ * ピンが見つからない・非表示 (裏側) になった・dot が `END_DOT` を割った
+ * (まもなく縁を越えて非表示になる)場合に終了する。
  */
-export const CENTER_TOLERANCE_PX = 16;
+export const shouldEndCallout = (
+  projectedDot: number | null,
+  visible: boolean,
+  endDot: number = END_DOT,
+): boolean => {
+  if (!visible || projectedDot === null) return true;
+  return projectedDot < endDot;
+};
 
 /**
- * ピンの画面 x 座標 (globeWrap ローカル座標、0..globeWidth) から左右どちらの列に
- * 振り分けるかを決める。`projectPin` はローカル座標を返すので、比較もローカル座標の
- * 中心 (globeWidth/2) に対して行う (ビューポート座標の中心と比べると常に左列判定になる)。
- *
- * 球面は画面上で常に左→右に流れているため、到着直後のピンはこの後右へ流れていく。
- * したがって「中心から明確に左に離れている」場合だけ左列 (1 周前の投稿、これから
- * 中心に近づいてくる) とし、それ以外 (中心付近・右側・null) はすべて右列 (最新の投稿、
- * 中心から右限へ流れていく) にする。これにより到着直後の浮動小数点ノイズで列がぶれて
- * リーダー線が球を横切る問題を防ぐ。
+ * ピン座標を基準に吹き出しの矩形を計算する。ピンの真上、水平中央に配置するのが基本だが、
+ * 上端が overlay の外にはみ出す場合は下側に配置し (`placeBelow: true`)、水平方向は
+ * overlay の内側に収まるようクランプする。
  */
-export const decideColumn = (projectedX: number | null, globeWidth: number): "left" | "right" =>
-  projectedX !== null && projectedX < globeWidth / 2 - CENTER_TOLERANCE_PX ? "left" : "right";
-
-/** ピン座標からカードの近い辺の中点まで、水平→斜めに1回折れるリーダー線の path を作る。 */
-export const buildLeaderPath = (
+export const bubbleRectFor = (
   pinX: number,
   pinY: number,
-  anchorX: number,
-  anchorY: number,
-): string => {
-  const midX = (pinX + anchorX) / 2;
-  return `M ${pinX} ${pinY} L ${midX} ${pinY} L ${anchorX} ${anchorY}`;
+  width: number,
+  height: number,
+  gap: number,
+  overlayRect: Readonly<{ width: number; height: number }>,
+): Readonly<{ rect: Rect; placeBelow: boolean }> => {
+  const aboveTop = pinY - gap - height;
+  const placeBelow = aboveTop < 0;
+  const top = placeBelow ? pinY + gap : aboveTop;
+
+  let left = pinX - width / 2;
+  if (left < 0) left = 0;
+  if (left + width > overlayRect.width) left = overlayRect.width - width;
+
+  return { rect: { left, top, width, height }, placeBelow };
 };
 
+/** 2 つの矩形が重なっているかどうかを判定する。 */
+export const rectsIntersect = (a: Rect, b: Rect): boolean =>
+  a.left < b.left + b.width &&
+  a.left + a.width > b.left &&
+  a.top < b.top + b.height &&
+  a.top + a.height > b.top;
+
+/** 矩形を全方向に `margin` だけ広げた矩形を返す (重なり判定を保守的にするため)。 */
+export const expandRect = (rect: Rect, margin: number): Rect => ({
+  left: rect.left - margin,
+  top: rect.top - margin,
+  width: rect.width + margin * 2,
+  height: rect.height + margin * 2,
+});
+
 /**
- * createdAt の降順 (新しい順) を保ったまま `entry` を `column` に挿入した新しい配列を返す
- * (入力配列は変更しない)。挿入位置は `entry.createdAt` に基づいて決まる。
+ * 重なった 2 つの吹き出しのうち、どちらを消すべきかを選ぶ純粋関数。
+ * 一方が `MIN_AGE_BEFORE_OVERLAP_REMOVE_MS` 未満しか経過していない場合、
+ * それは保守的な見積もりで重ならない位置に置かれたばかりのはずなので保護し、
+ * もう一方 (後から重なりに入り込んできた側) を消す。両方とも経過済み、または
+ * 両方ともまだ若い場合は、単純に `shownAt` が古い方を消す。
  */
-export const insertByCreatedAt = <T extends { readonly createdAt: number }>(
-  column: readonly T[],
-  entry: T,
-): readonly T[] => {
-  const idx = column.findIndex((existing) => existing.createdAt < entry.createdAt);
-  const insertAt = idx === -1 ? column.length : idx;
-  return [...column.slice(0, insertAt), entry, ...column.slice(insertAt)];
+export const pickOverlapLoser = <T extends { readonly shownAt: number }>(
+  a: T,
+  b: T,
+  now: number,
+  minAgeMs: number = MIN_AGE_BEFORE_OVERLAP_REMOVE_MS,
+): T => {
+  const aYoung = now - a.shownAt < minAgeMs;
+  const bYoung = now - b.shownAt < minAgeMs;
+  if (aYoung && !bYoung) return b;
+  if (bYoung && !aYoung) return a;
+  return a.shownAt <= b.shownAt ? a : b;
 };
 
-/** `column` の先頭 `max` 件を超えた分 (末尾、つまり最も古いもの) を返す。超過がなければ空配列。 */
-export const overflow = <T>(column: readonly T[], max: number): readonly T[] =>
-  column.length > max ? column.slice(max) : [];
+export type RefillCandidate = Readonly<{
+  id: string;
+  createdAt: number;
+  /** ピン先端の overlay (stage) 基準座標。既存の吹き出し矩形と同じ座標系で比較する。 */
+  projectedX: number | null;
+  projectedY: number | null;
+  visible: boolean;
+  dot: number;
+  hasCard: boolean;
+  /** 直近で吹き出しが消えた時刻 (ms)。一度も表示されたことが無ければ null。 */
+  lastShownAt: number | null;
+}>;
 
 /**
- * 2nd phase (裏から表に戻ってきた吹き出し) を終了させるべきかどうかを判定する。
- * 非表示になった (裏側に回った)、ピンが見つからない、または中心を超えて右半分に
- * 入った (球の右限へ流れ切った)場合に終了する。
+ * 空いている 1 枠をリフィルする候補を、プール内の投稿から 1 件選ぶ純粋関数。
+ * 対象は「表示中」「まだカードが無い」「dot が `REFILL_MIN_DOT` 以上」のもの。加えて、画面右半分 (`x >= globeCenterX`、overlay 基準、
+ * これから縁へ流れていく途中) のピンは `REFILL_MIN_DOT_RIGHT_HALF` 未満 (まもなく
+ * 縁を越える) を除外する (追加してすぐ消えるカードを避けるため)。
+ * また、吹き出しを置いたと仮定した矩形 (`ESTIMATED_BUBBLE_W/H` でピン直上に見積もる) が
+ * 既存のいずれかの吹き出しと重なる候補は除外する (重なり回避)。
+ * さらに、`lastShownAt` から `RESHOW_COOLDOWN_MS` (3秒) 未満しか経っていない
+ * (吹き出しが消えたばかりの) ピンも除外する (同じピンがすぐ再登場するのを防ぐ)。
+ * 優先順位は投稿の新しい順 (`createdAt` 降順) のみ。該当が無ければ null を返す。
  */
-export const shouldEndSecondPhase = (
-  projectedX: number | null,
-  visible: boolean,
-  globeWidth: number,
-): boolean => !visible || projectedX === null || projectedX >= globeWidth / 2;
+export const pickRefillCandidate = (
+  candidates: readonly RefillCandidate[],
+  globeCenterX: number,
+  overlaySize: Readonly<{ width: number; height: number }>,
+  existingRects: readonly Rect[],
+  now: number,
+): string | null => {
+  const eligible = candidates.filter((candidate) => {
+    if (candidate.hasCard || !candidate.visible) return false;
+    if (candidate.projectedX === null || candidate.projectedY === null) return false;
+    if (candidate.dot < REFILL_MIN_DOT) return false;
+    if (candidate.projectedX >= globeCenterX && candidate.dot < REFILL_MIN_DOT_RIGHT_HALF) {
+      return false;
+    }
+    if (candidate.lastShownAt !== null && now - candidate.lastShownAt < RESHOW_COOLDOWN_MS) {
+      return false;
+    }
+    // 尻尾 (ピンとの隙間) の分も矩形に含めて見積もる (BUBBLE_GAP_PX 分だけ縦に拡張)。
+    const { rect } = bubbleRectFor(
+      candidate.projectedX,
+      candidate.projectedY,
+      ESTIMATED_BUBBLE_W,
+      ESTIMATED_BUBBLE_H + BUBBLE_GAP_PX,
+      BUBBLE_GAP_PX,
+      overlaySize,
+    );
+    const expanded = expandRect(rect, OVERLAP_MARGIN_PX);
+    return !existingRects.some((existing) =>
+      rectsIntersect(expanded, expandRect(existing, OVERLAP_MARGIN_PX)),
+    );
+  });
+  if (eligible.length === 0) return null;
+
+  const best = [...eligible].sort((a, b) => b.createdAt - a.createdAt)[0];
+  return best?.id ?? null;
+};
 
 type CalloutEntry = {
   readonly id: string;
   readonly createdAt: number;
-  column: "left" | "right";
-  phase: "first" | "second";
+  readonly shownAt: number;
   readonly card: HTMLDivElement;
-  readonly leader: SVGPathElement;
   fadeTimer: ReturnType<typeof setTimeout> | null;
   /** フェードアウト CSS 完了後に removeEntry するための内側の setTimeout。 */
   hideTimer: ReturnType<typeof setTimeout> | null;
-  hiddenForBackside: boolean;
+  /** 初回配置後にキャッシュしたカードサイズ (毎フレーム offsetWidth/offsetHeight を読まないため)。 */
+  size: { width: number; height: number } | null;
 };
 
 export type CalloutsHandle = Readonly<{
-  /** 投稿の吹き出しを追加する。既存の同じ列の吹き出しは繰り上がり、4件目は消える。 */
+  /** 投稿の吹き出しを追加する。上限に達していれば強調無しの吹き出しのうち最も古いものが消える。到着時専用 (強調表示)。 */
   addCallout: (post: Post) => void;
-  /** id の吹き出しがあれば即座に取り除く (投稿削除時に呼ぶ)。 */
+  /** 投稿をプールに追加する (リフィル候補になる)。新規投稿到着時に呼ぶ。 */
+  trackPost: (post: Post) => void;
+  /** 投稿の集合でプールを置き換える (snapshot 反映時に呼ぶ)。存在しなくなった id のカードも消す。 */
+  syncPosts: (posts: readonly Post[]) => void;
+  /** id の吹き出しがあれば即座に取り除き、プールからも除く (投稿削除時に呼ぶ)。 */
   removeCallout: (id: string) => void;
-  /** 全ての吹き出しを即座に取り除く (snapshot 置換・reset 時に呼ぶ)。 */
+  /** 全ての吹き出しとプールを即座に取り除く (reset 時に呼ぶ)。 */
   clearAll: () => void;
   dispose: () => void;
 }>;
@@ -140,53 +251,75 @@ const createCard = (post: Post, isLatest: boolean): HTMLDivElement => {
 };
 
 /**
- * HTML 吹き出し + SVG リーダー線のオーバーレイ管理。
- * globe の `onFrame`/`projectPin` を使い、毎フレームリーダー線の位置だけを更新する
- * (カード・線の再レイアウト自体は追加・削除・コンテナのリサイズ時のみ行う)。
+ * 漫画風の吹き出し (speech bubble) オーバーレイ管理 (アンビエント方式)。
  *
- * 各吹き出しは 2 つのフェーズを持つ (`CalloutEntry.phase`):
- * - "first": 到着 (中心) から裏に回るまで。右列 = 最新の投稿 (中心→右限へ流れる)。
- * - "second": 裏から表に戻ってきてから片付くまで。左列 = 1 周前の投稿
- *   (左限→中心へ流れてくる)。表面は常に左→右に流れるため、2nd phase の吹き出しは
- *   中心を通過するとすぐ右半分に入る。そこで `shouldEndSecondPhase` により
- *   「右半分に入ったら」または「再び裏に回ったら」フェードアウトさせ、リーダー線が
- *   球の反対側までずっと伸び続けるのを防いでいる。
+ * 各吹き出しは列に属さず、対応するピンのすぐ上 (画面外にはみ出す場合は下) に
+ * 毎フレーム追従して表示される。盤面は常に表側にいるピンの吹き出しを最大
+ * `MAX_BUBBLES` 件まで表示し続けることを目指す:
+ * - 新規投稿の到着時は `addCallout` で強調表示 (`--latest`) の吹き出しを追加する。
+ * - それ以外の枠は `REFILL_INTERVAL_MS` ごとに、まだ吹き出しの無いプール内の投稿から
+ *   `pickRefillCandidate` で選んだものを 1 件ずつ補充する
+ *   (優先は投稿の新しい順。ただし直近で消えたばかりのピンはクールダウン中として除外し、
+ *   既存の吹き出しと重ならないものだけを選ぶ)。
+ * - 吹き出しはピンが非表示になるか `END_DOT` を割ったら消える。
+ * - 毎フレーム、吹き出し同士が重なったら基本は `shownAt` が古い方を消すが、補充直後
+ *   (`MIN_AGE_BEFORE_OVERLAP_REMOVE_MS` 未満) の吹き出しは保護し、その場合は
+ *   後から重なりに入り込んできた古い方を消す (`pickOverlapLoser`)。
+ *
+ * globe の `onFrame`/`projectPin` を使い、毎フレーム位置更新と終了判定を行う。
+ * カードサイズは初回配置後にキャッシュし (`entry.size`)、以後のフレームで
+ * `getBoundingClientRect`/`offsetWidth` を読み直さない (パフォーマンス対策、リサイズ時のみ再計測)。
  */
-export const createCallouts = (
-  container: HTMLElement,
-  svg: SVGSVGElement,
-  globe: GlobeHandle,
-): CalloutsHandle => {
+export const createCallouts = (container: HTMLElement, globe: GlobeHandle): CalloutsHandle => {
   const overlay = document.createElement("div");
   overlay.className = "callouts-overlay";
   container.appendChild(overlay);
 
-  const leftColumn: CalloutEntry[] = [];
-  const rightColumn: CalloutEntry[] = [];
   const entries = new Map<string, CalloutEntry>();
-
-  const columnOf = (col: "left" | "right"): CalloutEntry[] =>
-    col === "left" ? leftColumn : rightColumn;
+  const pool = new Map<string, Post>();
+  const lastShownAt = new Map<string, number>();
+  let lastRefillAt = 0;
 
   const removeEntry = (entry: CalloutEntry): void => {
     if (entry.fadeTimer) clearTimeout(entry.fadeTimer);
     if (entry.hideTimer) clearTimeout(entry.hideTimer);
     entry.card.remove();
-    entry.leader.remove();
     entries.delete(entry.id);
-    const col = columnOf(entry.column);
-    const idx = col.indexOf(entry);
-    if (idx >= 0) col.splice(idx, 1);
-    layoutColumn(entry.column);
+    // 吹き出しが消えた時刻を記録する (RESHOW_COOLDOWN_MS の起点)。投稿自体が削除された
+    // 場合は removeCallout がこの直後に消すので、クールダウン扱いにはならない。
+    lastShownAt.set(entry.id, Date.now());
   };
 
   const removeCallout = (id: string): void => {
     const entry = entries.get(id);
     if (entry) removeEntry(entry);
+    pool.delete(id);
+    lastShownAt.delete(id);
   };
 
   const clearAll = (): void => {
     for (const entry of [...entries.values()]) removeEntry(entry);
+    pool.clear();
+    lastShownAt.clear();
+  };
+
+  const syncPosts = (posts: readonly Post[]): void => {
+    const ids = new Set(posts.map((post) => post.id));
+    pool.clear();
+    for (const post of posts) pool.set(post.id, post);
+    for (const id of [...entries.keys()]) {
+      if (!ids.has(id)) {
+        const entry = entries.get(id);
+        if (entry) removeEntry(entry);
+      }
+    }
+    for (const id of [...lastShownAt.keys()]) {
+      if (!ids.has(id)) lastShownAt.delete(id);
+    }
+  };
+
+  const trackPost = (post: Post): void => {
+    pool.set(post.id, post);
   };
 
   const fadeOutAndRemove = (entry: CalloutEntry): void => {
@@ -202,130 +335,155 @@ export const createCallouts = (
     entry.fadeTimer = setTimeout(() => fadeOutAndRemove(entry), MAX_LIFETIME_MS);
   };
 
-  const layoutColumn = (column: "left" | "right"): void => {
-    const col = columnOf(column);
-    if (col.length === 0) return;
-    const globeRect = globe.getBounds();
+  const rectOf = (entry: CalloutEntry): Rect | null => {
+    if (!entry.size) return null;
+    const left = Number.parseFloat(entry.card.style.left || "0");
+    const top = Number.parseFloat(entry.card.style.top || "0");
+    return { left, top, width: entry.size.width, height: entry.size.height };
+  };
+
+  /** ピン位置に合わせてカードの style.left/top と上下配置クラスを更新する。 */
+  const positionCard = (entry: CalloutEntry, pinX: number, pinY: number): void => {
     const overlayRect = overlay.getBoundingClientRect();
-    const centerY = globeRect.top + globeRect.height / 2 - overlayRect.top;
-
-    const heights = col.map((entry) => entry.card.offsetHeight);
-    const totalHeight = heights.reduce((sum, h) => sum + h, 0) + COLUMN_GAP * (col.length - 1);
-    let y = centerY - totalHeight / 2;
-
-    for (let i = 0; i < col.length; i++) {
-      const entry = col[i];
-      const h = heights[i];
-      if (!entry || h === undefined) continue;
-      entry.card.style.top = `${y}px`;
-      if (column === "left") {
-        const rightEdgeX = globeRect.left - COLUMN_MARGIN - overlayRect.left;
-        entry.card.style.left = `${rightEdgeX - entry.card.offsetWidth}px`;
-      } else {
-        const leftEdgeX = globeRect.right + COLUMN_MARGIN - overlayRect.left;
-        entry.card.style.left = `${leftEdgeX}px`;
-      }
-      y += h + COLUMN_GAP;
+    if (!entry.size) {
+      entry.size = {
+        width: entry.card.offsetWidth,
+        height: entry.card.offsetHeight,
+      };
     }
+    const { rect, placeBelow } = bubbleRectFor(
+      pinX,
+      pinY,
+      entry.size.width,
+      entry.size.height,
+      BUBBLE_GAP_PX,
+      overlayRect,
+    );
+    entry.card.style.left = `${rect.left}px`;
+    entry.card.style.top = `${rect.top}px`;
+    entry.card.classList.toggle("callout-card--below", placeBelow);
   };
 
-  const layoutBothColumns = (): void => {
-    layoutColumn("left");
-    layoutColumn("right");
-  };
-
-  const addCallout = (post: Post): void => {
-    if (entries.has(post.id)) return;
-    const projected = globe.projectPin(post.id);
-    const globeRect = globe.getBounds();
-    const column = decideColumn(projected?.x ?? null, globeRect.width);
-    const col = columnOf(column);
-
-    for (const existing of col) {
-      existing.card.classList.remove("callout-card--latest");
-      existing.leader.classList.remove("callout-leader--latest");
-    }
-
-    while (col.length >= MAX_PER_COLUMN) {
-      const oldest = col[col.length - 1];
-      if (!oldest) break;
-      removeEntry(oldest);
-    }
-
-    const card = createCard(post, true);
-    card.classList.add(`callout-card--${column}`);
+  const createEntry = (post: Post, isLatest: boolean): CalloutEntry => {
+    const card = createCard(post, isLatest);
     overlay.appendChild(card);
-
-    const leader = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    leader.setAttribute("class", "callout-leader callout-leader--latest");
-    svg.appendChild(leader);
 
     const entry: CalloutEntry = {
       id: post.id,
       createdAt: post.createdAt,
-      column,
-      phase: "first",
+      shownAt: Date.now(),
       card,
-      leader,
       fadeTimer: null,
       hideTimer: null,
-      hiddenForBackside: false,
+      size: null,
     };
     entries.set(post.id, entry);
-    col.unshift(entry);
     scheduleFade(entry);
-    layoutColumn(column);
+
+    const projected = globe.projectPin(post.id);
+    const globeRect = globe.getBounds();
+    const overlayRect = overlay.getBoundingClientRect();
+    if (projected) {
+      const pin = toOverlaySpace(projected.x, projected.y, globeRect, overlayRect);
+      positionCard(entry, pin.x, pin.y);
+    }
+    return entry;
+  };
+
+  /** 上限に達している場合、強調無しの吹き出しのうち最も古いものを取り除く。 */
+  const makeRoomIfFull = (): void => {
+    if (entries.size < MAX_BUBBLES) return;
+    const byAge = (a: CalloutEntry, b: CalloutEntry): number => a.shownAt - b.shownAt;
+    const nonLatest = [...entries.values()]
+      .filter((entry) => !entry.card.classList.contains("callout-card--latest"))
+      .sort(byAge);
+    const oldest = nonLatest[0] ?? [...entries.values()].sort(byAge)[0];
+    if (oldest) removeEntry(oldest);
+  };
+
+  /** 新規投稿の到着時: 強調表示の吹き出しを追加する (既存があれば入れ替える)。 */
+  const addCallout = (post: Post): void => {
+    pool.set(post.id, post);
+    const existing = entries.get(post.id);
+    if (existing) removeEntry(existing);
+
+    for (const other of entries.values()) {
+      other.card.classList.remove("callout-card--latest");
+    }
+
+    makeRoomIfFull();
+    createEntry(post, true);
+  };
+
+  const refillOne = (globeRect: Rect): void => {
+    if (entries.size >= MAX_BUBBLES) return;
+    const overlayRect = overlay.getBoundingClientRect();
+    // 候補の座標は既存の吹き出し矩形 (style.left/top = overlay 基準) と同じ座標系に揃える。
+    const globeCenterX = globeRect.left - overlayRect.left + globeRect.width / 2;
+    const existingRects = [...entries.values()]
+      .map(rectOf)
+      .filter((rect): rect is Rect => rect !== null);
+
+    const candidates: RefillCandidate[] = [...pool.values()].map((post) => {
+      const projected = globe.projectPin(post.id);
+      const pin = projected
+        ? toOverlaySpace(projected.x, projected.y, globeRect, overlayRect)
+        : null;
+      return {
+        id: post.id,
+        createdAt: post.createdAt,
+        projectedX: pin?.x ?? null,
+        projectedY: pin?.y ?? null,
+        visible: !!projected?.visible,
+        dot: projected?.dot ?? -1,
+        hasCard: entries.has(post.id),
+        lastShownAt: lastShownAt.get(post.id) ?? null,
+      };
+    });
+
+    const chosenId = pickRefillCandidate(
+      candidates,
+      globeCenterX,
+      { width: overlayRect.width, height: overlayRect.height },
+      existingRects,
+      Date.now(),
+    );
+    if (!chosenId) return;
+    const post = pool.get(chosenId);
+    if (!post) return;
+
+    createEntry(post, false);
   };
 
   /**
-   * 2nd phase で列を移動する必要が生じたエントリを、現在の列から取り除いて
-   * `newColumn` に createdAt 順で挿入し直す。溢れた分 (最大件数超過) は削除する。
+   * 重なっている吹き出しのうち、`pickOverlapLoser` が選んだ方を消す。
+   * 補充直後 (`MIN_AGE_BEFORE_OVERLAP_REMOVE_MS` 未満) の吹き出しは保守的な見積もりで
+   * 重ならない位置に置かれたばかりのはずなので保護し、後から重なりに入り込んできた
+   * 古い方を代わりに消す (churn 防止)。
    */
-  const moveEntry = (entry: CalloutEntry, newColumn: "left" | "right"): void => {
-    const oldColArr = columnOf(entry.column);
-    const idx = oldColArr.indexOf(entry);
-    if (idx >= 0) oldColArr.splice(idx, 1);
-
-    entry.card.classList.remove(`callout-card--${entry.column}`);
-    entry.card.classList.add(`callout-card--${newColumn}`);
-    entry.column = newColumn;
-
-    const newColArr = columnOf(newColumn);
-    const reordered = insertByCreatedAt(newColArr, entry);
-    newColArr.length = 0;
-    newColArr.push(...reordered);
-
-    for (const stale of overflow(newColArr, MAX_PER_COLUMN)) {
-      const staleIdx = newColArr.indexOf(stale);
-      if (staleIdx >= 0) newColArr.splice(staleIdx, 1);
-      removeEntry(stale);
+  const resolveOverlaps = (): void => {
+    const now = Date.now();
+    const list = [...entries.values()].filter((entry) => !entry.hideTimer);
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      const aRect = a ? rectOf(a) : null;
+      if (!a || !aRect || a.hideTimer) continue;
+      for (let j = i + 1; j < list.length; j++) {
+        const b = list[j];
+        const bRect = b ? rectOf(b) : null;
+        if (!b || !bRect || b.hideTimer) continue;
+        if (
+          rectsIntersect(expandRect(aRect, OVERLAP_MARGIN_PX), expandRect(bRect, OVERLAP_MARGIN_PX))
+        ) {
+          fadeOutAndRemove(pickOverlapLoser(a, b, now));
+        }
+      }
     }
-
-    layoutBothColumns();
   };
 
-  const updateLeaderPath = (entry: CalloutEntry, pinX: number, pinY: number): void => {
-    const cardRect = entry.card.getBoundingClientRect();
-    const overlayRect = overlay.getBoundingClientRect();
-    // globe.projectPin は globe コンテナ (globeWrap) 基準の座標を返すが、
-    // 吹き出しカードと SVG (leader line) は overlay (stage 全体) 基準なので、
-    // globeWrap が stage 内でオフセットしている分 (見出し分の余白など) を補正する。
+  const unsubscribe = globe.onFrame((elapsedSec) => {
     const globeRect = globe.getBounds();
-    const pin = toOverlaySpace(pinX, pinY, globeRect, overlayRect);
-
-    const cardLeft = cardRect.left - overlayRect.left;
-    const cardTop = cardRect.top - overlayRect.top;
-    const cardCenterY = cardTop + cardRect.height / 2;
-    const anchorX = entry.column === "left" ? cardLeft + cardRect.width : cardLeft;
-    const anchorY = cardCenterY;
-
-    entry.leader.setAttribute("d", buildLeaderPath(pin.x, pin.y, anchorX, anchorY));
-  };
-
-  const unsubscribe = globe.onFrame(() => {
-    // レイアウト (getBoundingClientRect の再計算とリフロー) は追加/削除/リサイズ時だけに
-    // 限定し、毎フレームはリーダー線の位置更新だけを行う (パフォーマンス対策)。
-    const globeWidth = globe.getBounds().width;
+    const overlayRect = overlay.getBoundingClientRect();
     for (const entry of entries.values()) {
       // すでにフェードアウト中 (hideTimer 予約済み) なら、そのタイマーに任せて何もしない。
       if (entry.hideTimer) continue;
@@ -333,45 +491,28 @@ export const createCallouts = (
       const projected = globe.projectPin(entry.id);
       const visible = !!projected?.visible;
 
-      // 2nd phase (表に戻ってきた 1 周前の吹き出し) は、右半分に流れ切るか再び裏に
-      // 回ったら片付ける。これがリーダー線が球を横切り続けるのを防ぐ本体のロジック。
-      if (
-        entry.phase === "second" &&
-        shouldEndSecondPhase(projected?.x ?? null, visible, globeWidth)
-      ) {
+      if (!projected || shouldEndCallout(projected.dot, visible)) {
         fadeOutAndRemove(entry);
         continue;
       }
 
-      if (!projected || !visible) {
-        if (!entry.hiddenForBackside) {
-          entry.hiddenForBackside = true;
-          entry.card.classList.add("callout-card--hidden");
-          entry.leader.classList.add("callout-leader--hidden");
-        }
-        continue;
-      }
+      const pin = toOverlaySpace(projected.x, projected.y, globeRect, overlayRect);
+      positionCard(entry, pin.x, pin.y);
+    }
 
-      if (entry.hiddenForBackside) {
-        entry.hiddenForBackside = false;
-        entry.card.classList.remove("callout-card--hidden");
-        entry.leader.classList.remove("callout-leader--hidden");
+    resolveOverlaps();
 
-        // 裏側から表に戻ってきた瞬間: 1st phase なら 2nd phase に移行し、
-        // 到着直後の「最新」強調を外して、現在位置で列を再判定する。
-        if (entry.phase === "first") {
-          entry.phase = "second";
-          entry.card.classList.remove("callout-card--latest");
-          entry.leader.classList.remove("callout-leader--latest");
-          const newColumn = decideColumn(projected.x, globeWidth);
-          if (newColumn !== entry.column) moveEntry(entry, newColumn);
-        }
-      }
-      updateLeaderPath(entry, projected.x, projected.y);
+    const nowMs = elapsedSec * 1000;
+    if (nowMs - lastRefillAt >= REFILL_INTERVAL_MS) {
+      lastRefillAt = nowMs;
+      refillOne(globeRect);
     }
   });
 
-  const resizeObserver = new ResizeObserver(layoutBothColumns);
+  const resizeObserver = new ResizeObserver(() => {
+    // リサイズ時はキャッシュ済みサイズを破棄し、次フレームで再計測させる。
+    for (const entry of entries.values()) entry.size = null;
+  });
   resizeObserver.observe(container);
 
   const dispose = (): void => {
@@ -381,5 +522,5 @@ export const createCallouts = (
     overlay.remove();
   };
 
-  return { addCallout, removeCallout, clearAll, dispose };
+  return { addCallout, trackPost, syncPosts, removeCallout, clearAll, dispose };
 };

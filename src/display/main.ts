@@ -29,7 +29,6 @@ const buildDom = (
   globeArea: HTMLDivElement;
   globeWrap: HTMLDivElement;
   overlayHost: HTMLDivElement;
-  svg: SVGSVGElement;
   toast: HTMLDivElement;
   counterValue: HTMLDivElement;
   qrImg: HTMLImageElement;
@@ -55,10 +54,6 @@ const buildDom = (
   overlayHost.style.position = "absolute";
   overlayHost.style.inset = "0";
   stage.appendChild(overlayHost);
-
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg") as SVGSVGElement;
-  svg.setAttribute("class", "callout-leader-svg");
-  stage.appendChild(svg);
 
   const heading = document.createElement("div");
   heading.className = "display-heading";
@@ -109,7 +104,6 @@ const buildDom = (
     globeArea,
     globeWrap,
     overlayHost,
-    svg,
     toast,
     counterValue,
     qrImg,
@@ -124,7 +118,7 @@ const main = (): void => {
 
   const dom = buildDom(app);
   const globe = createGlobe(dom.globeWrap);
-  const callouts = createCallouts(dom.overlayHost, dom.svg, globe);
+  const callouts = createCallouts(dom.overlayHost, globe);
   const audio = new BoardAudio();
 
   // 開発時のみ: ブラウザの devtools から `window.__confBoard.globe.projectPin(id)` 等で
@@ -208,16 +202,22 @@ const main = (): void => {
     dom.counterValue.textContent = String(total);
   };
 
+  /**
+   * snapshot (初回接続・再接続) の描画。ピンを一括追加し、投稿プールを丸ごと
+   * 置き換える (`syncPosts`)。以後は `createCallouts` 内のアンビエントなリフィルが
+   * 表側の投稿を随時カード化していくため、ここで即座に復元する必要はない。
+   * トースト・音は鳴らさない。
+   */
   const renderSnapshot = (posts: readonly Post[], total: number, celebrated: boolean): void => {
     globe.clear();
-    // snapshot は完全置換。古い吹き出しが残らないよう、こちらも一旦全部消す。
-    callouts.clearAll();
     knownIds = new Set();
     const toRender = posts.slice(Math.max(0, posts.length - MAX_PIN_MESHES));
     for (const post of toRender) {
       globe.addPin(post, { animate: false });
       knownIds.add(post.id);
     }
+    // snapshot は完全置換。プールと表示中のカードを最新の投稿集合に合わせる。
+    callouts.syncPosts(toRender);
     setCounter(total);
     celebratedState = celebrated;
   };
@@ -226,6 +226,7 @@ const main = (): void => {
     if (!knownIds.has(post.id)) {
       globe.addPin(post, { animate: true });
       knownIds.add(post.id);
+      callouts.trackPost(post);
       // 自転を正面に合わせてから波紋・吹き出し・音を出す (裏側に着地した場合の対策)。
       globe.focusPin(post.id, 900, () => {
         callouts.addCallout(post);

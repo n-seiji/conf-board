@@ -55,32 +55,9 @@
   pointer-events: none;
 }
 
-.callout-leader-svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.callout-leader {
-  fill: none;
-  stroke: var(--white-90);
-  stroke-width: 2px;
-  transition: opacity 200ms ease;
-}
-
-.callout-leader--latest {
-  stroke-width: 3px;
-}
-
-.callout-leader--hidden {
-  opacity: 0;
-}
-
 .callout-card {
   position: absolute;
-  max-width: 320px;
+  max-width: 260px;
   background: var(--white);
   color: var(--ink);
   border-radius: 20px;
@@ -88,7 +65,31 @@
   padding: 14px 18px 14px 24px;
   transition: opacity 200ms ease;
   opacity: 1;
-  overflow: hidden;
+  overflow: visible;
+}
+
+/*
+ * 漫画風の吹き出しの尻尾 (三角形)。既定はカード下端中央からピンを指す (上に配置)。
+ * `--below` はピンの下に配置したケースで、尻尾を上端中央に付け替える。
+ */
+.callout-card::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -9px;
+  width: 0;
+  height: 0;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-top: 10px solid var(--white);
+  transform: translateX(-50%);
+}
+
+.callout-card--below::after {
+  bottom: auto;
+  top: -9px;
+  border-top: none;
+  border-bottom: 10px solid var(--white);
 }
 
 /*
@@ -97,7 +98,7 @@
  * 隣のカードと重なってしまうため使わない。
  */
 .callout-card--latest {
-  max-width: calc(320px * 1.15);
+  max-width: calc(260px * 1.15);
 }
 
 .callout-card--latest .callout-card__nickname {
@@ -115,6 +116,8 @@
   top: 0;
   bottom: 0;
   width: 6px;
+  /* overflow: visible の下でも角丸からはみ出さないよう、カード本体と同じ半径を付ける。 */
+  border-radius: 20px 0 0 20px;
   background: var(--callout-accent, var(--mint-deep));
 }
 

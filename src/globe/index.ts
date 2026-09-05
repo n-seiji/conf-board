@@ -80,6 +80,8 @@ export type ProjectedPin = Readonly<{
   x: number;
   y: number;
   visible: boolean;
+  /** カメラ方向との内積 (1: 正面中央、0: 真横、負値: 裏側)。リフィル候補の残り表示時間の見積もりに使う。 */
+  dot: number;
 }>;
 
 export type AddPinOptions = Readonly<{
@@ -374,7 +376,7 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     const x = (ndc.x * 0.5 + 0.5) * width;
     const y = (1 - (ndc.y * 0.5 + 0.5)) * height;
 
-    return { x, y, visible: projected.visible };
+    return { x, y, visible: projected.visible, dot: projected.dot };
   };
 
   const getBounds = (): DOMRect => container.getBoundingClientRect();
