@@ -6,7 +6,7 @@ import { Group, type Object3D, Vector3 } from "three";
  */
 
 export const TILT_DEG = 12;
-export const ROTATION_PERIOD_SEC = 24;
+export const ROTATION_PERIOD_SEC = 48;
 export const DEFAULT_FOCUS_DURATION_MS = 900;
 /** これを超えて focus 待ちが積み上がった分は、正面合わせをせずその場で即着地させる。 */
 export const MAX_FOCUS_QUEUE = 3;
