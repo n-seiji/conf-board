@@ -53,6 +53,8 @@ const buildDom = (
   overlayHost.className = "callouts-host";
   overlayHost.style.position = "absolute";
   overlayHost.style.inset = "0";
+  // 吹き出し層は地球の canvas を覆うため、クリック・ドラッグを横取りしないよう通過させる。
+  overlayHost.style.pointerEvents = "none";
   stage.appendChild(overlayHost);
 
   const heading = document.createElement("div");
@@ -117,9 +119,16 @@ const main = (): void => {
   if (!app) return;
 
   const dom = buildDom(app);
-  const globe = createGlobe(dom.globeWrap);
+  const globe = createGlobe(dom.globeWrap, { interactive: true });
   const callouts = createCallouts(dom.overlayHost, globe);
   const audio = new BoardAudio();
+
+  // ピンをクリック/タップしたとき、その投稿の吹き出しを表示する (トースト・音は鳴らさない)。
+  const postsById = new Map<string, Post>();
+  globe.onPinPicked((id) => {
+    const post = postsById.get(id);
+    if (post) callouts.addCallout(post);
+  });
 
   // 開発時のみ: ブラウザの devtools から `window.__confBoard.globe.projectPin(id)` 等で
   // 回転・可視性を直接測れるようにする (本番ビルドには含まれない)。
@@ -211,10 +220,12 @@ const main = (): void => {
   const renderSnapshot = (posts: readonly Post[], total: number, celebrated: boolean): void => {
     globe.clear();
     knownIds = new Set();
+    postsById.clear();
     const toRender = posts.slice(Math.max(0, posts.length - MAX_PIN_MESHES));
     for (const post of toRender) {
       globe.addPin(post, { animate: false });
       knownIds.add(post.id);
+      postsById.set(post.id, post);
     }
     // snapshot は完全置換。プールと表示中のカードを最新の投稿集合に合わせる。
     callouts.syncPosts(toRender);
@@ -226,6 +237,7 @@ const main = (): void => {
     if (!knownIds.has(post.id)) {
       globe.addPin(post, { animate: true });
       knownIds.add(post.id);
+      postsById.set(post.id, post);
       callouts.trackPost(post);
       // 自転を正面に合わせてから波紋・吹き出し・音を出す (裏側に着地した場合の対策)。
       globe.focusPin(post.id, 900, () => {
@@ -254,12 +266,14 @@ const main = (): void => {
       globe.removePin(id);
       callouts.removeCallout(id);
       knownIds.delete(id);
+      postsById.delete(id);
       setCounter(total);
     },
     onReset: () => {
       globe.clear();
       callouts.clearAll();
       knownIds = new Set();
+      postsById.clear();
       celebratedState = false;
       setCounter(0);
     },

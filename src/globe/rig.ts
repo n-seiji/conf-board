@@ -12,6 +12,11 @@ export const DEFAULT_FOCUS_DURATION_MS = 900;
 export const MAX_FOCUS_QUEUE = 3;
 /** キューに後続が残っている間、1 件あたりの focus 所要時間をこれまで短縮して追いつく。 */
 export const BACKLOG_DURATION_MS = 500;
+/** ドラッグ/ホイールで許容する tilt の最大絶対値 (度)。北極・南極が見えなくなるほど傾けさせない。 */
+export const MAX_TILT_DEG = 60;
+const MAX_TILT_RAD = (MAX_TILT_DEG * Math.PI) / 180;
+/** 手動操作後、自転再開時に既定の傾きへ戻る速さ (大きいほど速く収束する)。 */
+const TILT_SETTLE_RATE = 3;
 
 /** カメラは常に world +Z 側から原点を見ている前提の固定方向。 */
 const CAMERA_DIRECTION: Readonly<Vector3> = new Vector3(0, 0, 1);
@@ -219,8 +224,33 @@ export class GlobeRig {
       // 正面 (z=1) にある点では dx/dθ=1 になる。よって += が「画面上で表面が
       // 左→右に流れる」向きになる (rig.test.ts で直接検証済み)。
       this.spinGroup.rotation.y += angularSpeed * dtSeconds;
+      this.settleTilt(dtSeconds);
     }
     this.tiltGroup.updateMatrixWorld(true);
+  }
+
+  /**
+   * ドラッグ/ホイール操作による手動回転を spinGroup/tiltGroup に加える。
+   * `deltaSpinRad` は spinGroup.rotation.y に、`deltaTiltRad` は tiltGroup.rotation.x に
+   * そのまま加算し、tilt は ±`MAX_TILT_DEG` にクランプする (極が裏返らないようにする)。
+   * focus アニメーション中は到着演出を優先し、手動回転は無視する (no-op)。
+   */
+  rotateBy(deltaSpinRad: number, deltaTiltRad: number): void {
+    if (this.focusAnimation) return;
+    this.spinGroup.rotation.y += deltaSpinRad;
+    const nextTilt = this.tiltGroup.rotation.x + deltaTiltRad;
+    this.tiltGroup.rotation.x = Math.min(MAX_TILT_RAD, Math.max(-MAX_TILT_RAD, nextTilt));
+    this.tiltGroup.updateMatrixWorld(true);
+  }
+
+  /**
+   * 自転中のみ、tiltGroup.rotation.x を既定の傾き (`this.tiltRad`) へ指数関数的に
+   * 戻す。ドラッグでディスプレイ既定の傾きから外れた後、手を離して自転が再開したら
+   * 徐々に元の見た目へ収束させるための処理 (`tick` の autoRotate 分岐からのみ呼ぶ)。
+   */
+  settleTilt(dtSeconds: number): void {
+    const factor = 1 - Math.exp(-dtSeconds * TILT_SETTLE_RATE);
+    this.tiltGroup.rotation.x += (this.tiltRad - this.tiltGroup.rotation.x) * factor;
   }
 
   /** ピンの世界座標の法線と (0,0,1) の内積、および可視判定。 */

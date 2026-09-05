@@ -272,3 +272,50 @@ describe("GlobeRig.focusPin: 連続到着時のキューイング (取りこぼ�
     expect(arrivedOrder).toEqual(["a", "b", "c"]);
   });
 });
+
+describe("GlobeRig.rotateBy", () => {
+  it("spin を deltaSpinRad 分だけ変化させる", () => {
+    const rig = new GlobeRig();
+    const before = rig.spinGroup.rotation.y;
+    rig.rotateBy(0.5, 0);
+    expect(rig.spinGroup.rotation.y).toBeCloseTo(before + 0.5);
+  });
+
+  it("tilt を ±MAX_TILT_DEG (60度) にクランプする", () => {
+    const rig = new GlobeRig();
+    rig.rotateBy(0, Math.PI); // 大きく振っても上限で止まる
+    expect(rig.tiltGroup.rotation.x).toBeCloseTo((60 * Math.PI) / 180);
+    rig.rotateBy(0, -Math.PI * 2);
+    expect(rig.tiltGroup.rotation.x).toBeCloseTo((-60 * Math.PI) / 180);
+  });
+
+  it("focus アニメーション中は no-op になる", () => {
+    const rig = new GlobeRig();
+    const mesh = makePinMesh();
+    const dir = latLonToVector3(0, 90, 1);
+    mesh.position.copy(dir).multiplyScalar(1.006);
+    rig.addPin("a", mesh, dir);
+    rig.focusPin("a", 0, 900);
+    const spinBefore = rig.spinGroup.rotation.y;
+    const tiltBefore = rig.tiltGroup.rotation.x;
+    rig.rotateBy(0.3, 0.3);
+    expect(rig.spinGroup.rotation.y).toBe(spinBefore);
+    expect(rig.tiltGroup.rotation.x).toBe(tiltBefore);
+  });
+});
+
+describe("GlobeRig.settleTilt", () => {
+  it("既定の傾きへ向けて収束し、行き過ぎない", () => {
+    const rig = new GlobeRig();
+    rig.rotateBy(0, Math.PI); // 上限までドラッグした状態にする
+    const clamped = rig.tiltGroup.rotation.x;
+    expect(clamped).toBeGreaterThan(rig.tiltRad);
+
+    for (let i = 0; i < 500; i++) {
+      rig.settleTilt(0.05);
+      expect(rig.tiltGroup.rotation.x).toBeLessThanOrEqual(clamped);
+      expect(rig.tiltGroup.rotation.x).toBeGreaterThanOrEqual(rig.tiltRad - 1e-6);
+    }
+    expect(rig.tiltGroup.rotation.x).toBeCloseTo(rig.tiltRad, 2);
+  });
+});

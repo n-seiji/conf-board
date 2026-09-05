@@ -31,6 +31,19 @@
   position: relative;
   height: 78%;
   aspect-ratio: 1 / 1;
+  touch-action: none;
+}
+
+.globe-wrap canvas {
+  cursor: grab;
+}
+
+.globe-wrap canvas:active {
+  cursor: grabbing;
+}
+
+.globe-wrap canvas[data-hover-pin] {
+  cursor: pointer;
 }
 
 .globe-wrap--celebrate {

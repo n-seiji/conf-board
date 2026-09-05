@@ -16,6 +16,7 @@ import {
 } from "three";
 import { pinColorHex } from "../shared/colors";
 import type { Post } from "../shared/types";
+import { bindGlobeInteraction, createIdleResume, nearestPinWithin } from "./interaction";
 import { createPinObject, orientPinToNormal } from "./pin-mesh";
 import { pinLatLon } from "./pins";
 import { DEFAULT_FOCUS_DURATION_MS, GlobeRig, TILT_DEG, latLonToVector3 } from "./rig";
@@ -67,6 +68,11 @@ export type GlobeOptions = Readonly<{
   preserveDrawingBuffer?: boolean;
   /** 自動回転するかどうか (デフォルト true)。 */
   autoRotate?: boolean;
+  /**
+   * ドラッグ/ホイールでの手動回転とピンのクリック選択を有効にするかどうか (デフォルト false)。
+   * スマホの到着画面など、演出専用で操作させたくない画面では false のままにする。
+   */
+  interactive?: boolean;
 }>;
 
 export type ProjectedPin = Readonly<{
@@ -111,7 +117,16 @@ export type GlobeHandle = Readonly<{
    * (`preserveDrawingBuffer: true` と併用する)。
    */
   render: () => void;
+  /** 自動回転の有効/無効を外部から切り替える (手動操作中の一時停止・アイドル復帰に使う)。 */
+  setAutoRotate: (enabled: boolean) => void;
+  /** ピンがクリック/タップで選ばれるたびに呼ばれる購読を登録する。解除関数を返す。 */
+  onPinPicked: (cb: (id: string) => void) => () => void;
 }>;
+
+/** 手動操作が止んでから自転を再開するまでのアイドル時間 (ms)。 */
+const IDLE_RESUME_MS = 5000;
+/** ピンのクリック/タップ判定半径 (px)。タッチでも押しやすいよう、実サイズより広めに取る。 */
+const PICK_RADIUS_PX = 18;
 
 const createRippleMeshes = (): readonly [Mesh, Mesh] => {
   const makeRing = (opacity: number): Mesh => {
@@ -362,9 +377,68 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     renderer.render(scene, camera);
   };
 
+  const setAutoRotate = (enabled: boolean): void => {
+    rig.autoRotate = enabled;
+  };
+
+  const pinPickedCallbacks = new Set<(id: string) => void>();
+  const onPinPicked = (cb: (id: string) => void): (() => void) => {
+    pinPickedCallbacks.add(cb);
+    return () => pinPickedCallbacks.delete(cb);
+  };
+
+  // interactive: true のときだけドラッグ/ホイール操作とピンのクリック選択を有効にする
+  // (スマホの到着画面は演出専用のため既定では無効)。
+  // ピックは 3D レイキャストではなく画面座標上の最近傍探索で行う。ピンの見た目
+  // (現状は細いコーン、将来はキャラクター glTF に差し替え予定) に依存せず、
+  // 自転中でも押しやすいタップ/クリック判定になる (`nearestPinWithin` 参照)。
+  const pickPinAt = (clientX: number, clientY: number): string | null => {
+    const rect = container.getBoundingClientRect();
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    const candidates = pinOrder
+      .map((id) => {
+        const projected = projectPin(id);
+        return projected
+          ? { id, x: projected.x, y: projected.y, visible: projected.visible }
+          : null;
+      })
+      .filter((c): c is { id: string; x: number; y: number; visible: boolean } => c !== null);
+    return nearestPinWithin(candidates, px, py, PICK_RADIUS_PX);
+  };
+
+  // 手動操作 (ドラッグ/ホイール) が始まったら自転を止め、5秒操作が無ければ再開する。
+  // focusPin の到着演出は autoRotate の値に依存しないため (rig.tick 参照)、
+  // 一時停止中でも新規到着ピンへの回転・波紋は問題なく再生される。
+  const idleResume = options.interactive
+    ? createIdleResume(
+        () => setAutoRotate(false),
+        () => setAutoRotate(true),
+        IDLE_RESUME_MS,
+      )
+    : null;
+
+  const unbindInteraction = options.interactive
+    ? bindGlobeInteraction(renderer.domElement, {
+        rotateBy: (spin, tilt) => rig.rotateBy(spin, tilt),
+        pickPinAt,
+        onPinPicked: (id) => {
+          idleResume?.touch();
+          setAutoRotate(false);
+          for (const cb of pinPickedCallbacks) cb(id);
+        },
+        // 見かけ上の球の直径 (px)。透視投影の厳密な射影計算まではせず、
+        // コンテナの短辺の 9 割程度を球の直径とみなす近似で十分な操作感が得られる。
+        diameterPx: () => Math.min(container.clientWidth, container.clientHeight) * 0.9,
+        onActivity: () => idleResume?.touch(),
+      })
+    : null;
+
   const dispose = (): void => {
     cancelAnimationFrame(rafId);
     resizeObserver.disconnect();
+    unbindInteraction?.();
+    idleResume?.dispose();
     clear();
     sphereGeometry.dispose();
     sphereMaterial.map?.dispose();
@@ -375,6 +449,7 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
       container.removeChild(renderer.domElement);
     }
     frameCallbacks.clear();
+    pinPickedCallbacks.clear();
   };
 
   return {
@@ -388,5 +463,7 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     projectPin,
     getBounds,
     render,
+    setAutoRotate,
+    onPinPicked,
   };
 };
