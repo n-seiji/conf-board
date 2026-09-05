@@ -1,0 +1,162 @@
+.admin-screen {
+  min-height: 100dvh;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+
+.admin-panel {
+  width: 100%;
+  max-width: 960px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-title {
+  font-size: 22px;
+  font-weight: 900;
+  margin: 0;
+  text-align: center;
+}
+
+.admin-card {
+  background: var(--white);
+  color: var(--ink);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-soft);
+  padding: 20px;
+}
+
+.admin-token-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.admin-token-row input {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-button);
+  border: 1px solid var(--mint-light);
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.admin-button {
+  padding: 10px 20px;
+  border-radius: var(--radius-button);
+  background: var(--mint);
+  color: var(--white);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.admin-button--danger {
+  background: var(--danger);
+}
+
+.admin-button:disabled {
+  background: var(--mint-light);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.admin-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.admin-error {
+  color: var(--danger-ink);
+  font-size: 13px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin-table th,
+.admin-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--mint-light);
+  vertical-align: top;
+}
+
+.admin-table th {
+  font-weight: 900;
+  color: var(--mint-deep);
+  white-space: nowrap;
+}
+
+.admin-table td.admin-col-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.admin-color-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.admin-color-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--mint-light);
+  flex: none;
+}
+
+.admin-delete-button {
+  padding: 6px 14px;
+  border-radius: var(--radius-button);
+  background: var(--danger);
+  color: var(--white);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.admin-delete-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.admin-empty {
+  text-align: center;
+  opacity: 0.6;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 24px 0;
+}
+
+.admin-connection {
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0.85;
+}
+
+.admin-connection--offline {
+  color: var(--warning);
+}
