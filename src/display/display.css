@@ -159,10 +159,6 @@
   font-size: calc(17px * 1.1);
 }
 
-.callout-card--hidden {
-  opacity: 0;
-}
-
 .callout-card--fade-out {
   opacity: 0;
 }

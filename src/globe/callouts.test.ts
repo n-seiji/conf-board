@@ -10,7 +10,7 @@ import {
   shouldEndCallout,
   shouldRefill,
   toOverlaySpace,
-} from "./callouts";
+} from "./callout-layout";
 
 describe("toOverlaySpace", () => {
   it("globeRect と overlayRect が同じ位置なら座標はそのまま", () => {
