@@ -3,10 +3,13 @@ import { loadLandPolygons } from "./land-data";
 import {
   type DrawContext,
   type WorldTextureData,
+  type Ring,
   buildBorderSegments,
   drawWorld,
   excludePolygonsSouthOf,
+  simplifyRing,
   smoothPolyline,
+  smoothRing,
 } from "./texture";
 
 const createMockContext = (): DrawContext & { calls: string[] } => {
@@ -188,6 +191,8 @@ describe("drawWorld", () => {
       width: 100,
       height: 50,
       minPolygonArea: 0,
+      // このテストは beginPath の呼ばれ方を検証するものなので、平滑化による座標のズレを避ける。
+      smoothIterations: 0,
     };
     drawWorld(ctx, palette, data);
 
@@ -343,6 +348,81 @@ describe("smoothPolyline", () => {
   });
 });
 
+describe("simplifyRing", () => {
+  it("小さな出っ張りを持つ正方形の場合、許容誤差1度で4点に単純化される", () => {
+    const ring: Ring = [
+      [0, 0],
+      [5, 0],
+      [5, 0.1], // わずかな出っ張り (誤差0.1度)
+      [10, 0],
+      [10, 10],
+      [0, 10],
+    ];
+    const simplified = simplifyRing(ring, 1);
+    expect(simplified.length).toBe(4);
+  });
+
+  it("点数が5未満のリングの場合、そのまま変更せず返す", () => {
+    const ring: Ring = [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+    ];
+    expect(simplifyRing(ring, 1)).toEqual(ring);
+  });
+});
+
+describe("smoothRing", () => {
+  it("正方形の場合、点数が増え、すべての点が元の外接矩形内に収まる", () => {
+    const ring: Ring = [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+    ];
+    const smoothed = smoothRing(ring, 2);
+    expect(smoothed.length).toBeGreaterThan(ring.length);
+    for (const [lon, lat] of smoothed) {
+      expect(lon).toBeGreaterThanOrEqual(0);
+      expect(lon).toBeLessThanOrEqual(10);
+      expect(lat).toBeGreaterThanOrEqual(0);
+      expect(lat).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it("正方形の場合、角が丸められ元の頂点座標がそのまま残らない", () => {
+    const ring: Ring = [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+    ];
+    const smoothed = smoothRing(ring, 2);
+    for (const corner of ring) {
+      expect(smoothed.some((p) => p[0] === corner[0] && p[1] === corner[1])).toBe(false);
+    }
+  });
+
+  it("antimeridianをまたぐリングの場合、地図を横断する隣接点を作らない", () => {
+    const ring: Ring = [
+      [170, 10],
+      [-170, 10],
+      [-170, -10],
+      [170, -10],
+    ];
+    const smoothed = smoothRing(ring, 2);
+    for (let i = 0; i < smoothed.length; i++) {
+      const curr = smoothed[i];
+      const next = smoothed[(i + 1) % smoothed.length];
+      if (!curr || !next) continue;
+      const diff = Math.abs(next[0] - curr[0]);
+      // 隣接点はほぼ近接 (30度以内) しているか、antimeridianの大きなジャンプ (180度超) のどちらか。
+      expect(diff <= 30 || diff > 180).toBe(true);
+    }
+  });
+});
+
 describe("drawWorld (実データ)", () => {
   it("実データ (land-110m) で穴を持つアフロユーラシア大陸の外周 (喜望峰付近) が描画される", () => {
     const ctx = createMockContext();
@@ -372,7 +452,9 @@ describe("drawWorld (実データ)", () => {
         if (!match) continue;
         const x = Number(match[1]);
         const y = Number(match[2]);
-        if (Math.abs(x - capOfGoodHope.x) <= 10 && Math.abs(y - capOfGoodHope.y) <= 10) {
+        // 平滑化 (simplifyRing + smoothRing) で喜望峰の頂点が僅かに移動するため、
+        // 従来の 10px から 30px まで許容範囲を広げる。
+        if (Math.abs(x - capOfGoodHope.x) <= 30 && Math.abs(y - capOfGoodHope.y) <= 30) {
           found = true;
         }
       }

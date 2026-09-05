@@ -30,6 +30,10 @@ export type WorldTextureData = Readonly<{
   southClipLat?: number;
   /** これより北 (大きい) は最後に海色で塗り潰す。 */
   northClipLat?: number;
+  /** 陸の輪郭を単純化する Douglas-Peucker の許容誤差 (度)。 */
+  simplifyToleranceDeg?: number;
+  /** 陸の輪郭を丸める Chaikin 平滑化の反復回数。 */
+  smoothIterations?: number;
 }>;
 
 /** Canvas 2D コンテキストのうち、描画に使うプロパティ・メソッドの部分集合。 */
@@ -50,10 +54,14 @@ export type DrawContext = {
 };
 
 const DEFAULT_MIN_AREA = 0.6;
-const DEFAULT_ROUND_STROKE = 18;
+const DEFAULT_ROUND_STROKE = 26;
 const DEFAULT_SOUTH_CLIP_LAT = -58;
 const DEFAULT_NORTH_CLIP_LAT = 84;
 const SOUTH_CLIP_LAT = -60;
+/** 大陸の輪郭を単純化する Douglas-Peucker の既定許容誤差 (度)。 */
+const DEFAULT_SIMPLIFY_TOLERANCE_DEG = 2.5;
+/** 大陸の輪郭を丸める Chaikin 平滑化の既定反復回数。 */
+const DEFAULT_SMOOTH_ITERATIONS = 3;
 /** 隣接点の経度差がこれを超えたら antimeridian をまたいだとみなし、線でつながない。 */
 const LON_JUMP_THRESHOLD = 180;
 
@@ -75,6 +83,125 @@ const ringArea = (ring: Ring): number => {
     sum += p0[0] * p1[1] - p1[0] * p0[1];
   }
   return Math.abs(sum) / 2;
+};
+
+/** 点 p から線分 (a, b) までの垂直距離。 */
+const perpendicularDistance = (p: LonLat, a: LonLat, b: LonLat): number => {
+  const [px, py] = p;
+  const [ax, ay] = a;
+  const [bx, by] = b;
+  const dx = bx - ax;
+  const dy = by - ay;
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(px - ax, py - ay);
+  }
+  const t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy);
+  const clampedT = Math.max(0, Math.min(1, t));
+  const projX = ax + clampedT * dx;
+  const projY = ay + clampedT * dy;
+  return Math.hypot(px - projX, py - projY);
+};
+
+/** Douglas-Peucker 法 (開いた折れ線) で points を単純化する。両端点は必ず残る。 */
+const douglasPeucker = (points: readonly LonLat[], toleranceDeg: number): readonly LonLat[] => {
+  if (points.length < 3) return points;
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (!first || !last) return points;
+
+  let maxDist = -1;
+  let maxIdx = -1;
+  for (let i = 1; i < points.length - 1; i++) {
+    const p = points[i];
+    if (!p) continue;
+    const dist = perpendicularDistance(p, first, last);
+    if (dist > maxDist) {
+      maxDist = dist;
+      maxIdx = i;
+    }
+  }
+
+  if (maxDist <= toleranceDeg || maxIdx === -1) {
+    return [first, last];
+  }
+
+  const left = douglasPeucker(points.slice(0, maxIdx + 1), toleranceDeg);
+  const right = douglasPeucker(points.slice(maxIdx), toleranceDeg);
+  return [...left.slice(0, -1), ...right];
+};
+
+/**
+ * 閉じたリングを Douglas-Peucker 法で単純化し、粗いポリゴンデータの
+ * 折れ曲がった見た目 (ボコボコ感) の元になる余分な頂点を間引く。
+ * リングは最初の点から最後の点までの開いた折れ線として扱い、両端点は保持する。
+ * 5点未満のリングはこれ以上単純化する意味がないためそのまま返す。
+ */
+export const simplifyRing = (ring: Ring, toleranceDeg: number): Ring => {
+  if (ring.length < 5) return ring;
+  const simplified = douglasPeucker(ring, toleranceDeg);
+  if (simplified.length < 4) return ring;
+  return simplified;
+};
+
+/**
+ * 閉じたリングを Chaikin のコーナーカット法で `iterations` 回平滑化する。
+ * 等距円筒図法では antimeridian (経度180度線) をまたぐ辺をそのまま丸めると
+ * 地図を横断する線になってしまうため、経度差が LON_JUMP_THRESHOLD を超える箇所で
+ * リングを複数の chain に分割し、各 chain を開いた折れ線として (端点を保持して) 平滑化してから
+ * 元の順序で繋ぎ直す (ジャンプ点どうしは隣接したまま残るので、tracePolygon 側の
+ * ジャンプ処理はそのまま機能する)。ジャンプが無いリングは閉じた輪として平滑化する。
+ */
+export const smoothRing = (ring: Ring, iterations: number): Ring => {
+  if (ring.length < 3) return ring;
+
+  const jumpIndices: number[] = [];
+  for (let i = 0; i < ring.length; i++) {
+    const curr = ring[i];
+    const next = ring[(i + 1) % ring.length];
+    if (!curr || !next) continue;
+    if (Math.abs(next[0] - curr[0]) > LON_JUMP_THRESHOLD) {
+      jumpIndices.push(i);
+    }
+  }
+
+  if (jumpIndices.length === 0) {
+    // 閉じたリングとして平滑化する: 各辺 (p, q) を 1/4, 3/4 点の2点に置き換える。
+    let pts = ring;
+    for (let iter = 0; iter < iterations; iter++) {
+      const result: LonLat[] = [];
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
+        const q = pts[(i + 1) % pts.length];
+        if (!p || !q) continue;
+        result.push(
+          [p[0] * 0.75 + q[0] * 0.25, p[1] * 0.75 + q[1] * 0.25],
+          [p[0] * 0.25 + q[0] * 0.75, p[1] * 0.25 + q[1] * 0.75],
+        );
+      }
+      pts = result;
+    }
+    return pts;
+  }
+
+  // ジャンプ点で chain に分割する。各 chain は「ジャンプ直後の点」から「次のジャンプ点」まで。
+  const chains: LonLat[][] = [];
+  const n = ring.length;
+  for (let c = 0; c < jumpIndices.length; c++) {
+    const startIdx = (jumpIndices[c] ?? 0) + 1 === n ? 0 : (jumpIndices[c] ?? 0) + 1;
+    const endJump = jumpIndices[(c + 1) % jumpIndices.length] ?? 0;
+    const chain: LonLat[] = [];
+    let idx = startIdx % n;
+    for (;;) {
+      const p = ring[idx];
+      if (p) chain.push(p);
+      if (idx === endJump) break;
+      idx = (idx + 1) % n;
+    }
+    chains.push(chain);
+  }
+
+  const smoothedChains = chains.map((chain) => smoothPolyline(chain, iterations));
+  return smoothedChains.flat();
 };
 
 /**
@@ -142,14 +269,21 @@ export const drawWorld = (ctx: DrawContext, palette: Palette, data: WorldTexture
   const { width, height } = data;
   const minArea = data.minPolygonArea ?? DEFAULT_MIN_AREA;
   const strokeWidth = data.roundStrokeWidth ?? DEFAULT_ROUND_STROKE;
+  const simplifyToleranceDeg = data.simplifyToleranceDeg ?? DEFAULT_SIMPLIFY_TOLERANCE_DEG;
+  const smoothIterations = data.smoothIterations ?? DEFAULT_SMOOTH_ITERATIONS;
 
   ctx.fillStyle = palette.ocean;
   ctx.fillRect(0, 0, width, height);
 
-  const visiblePolygons = excludePolygonsSouthOf(data.landPolygons).filter((polygon) => {
-    const outer = polygon[0];
-    return outer !== undefined && ringArea(outer) >= minArea;
-  });
+  // 面積フィルタは元 (単純化前) のリングで判定し、小島の除外基準を従来どおり保つ。
+  const visiblePolygons = excludePolygonsSouthOf(data.landPolygons)
+    .filter((polygon) => {
+      const outer = polygon[0];
+      return outer !== undefined && ringArea(outer) >= minArea;
+    })
+    .map((polygon) =>
+      polygon.map((ring) => smoothRing(simplifyRing(ring, simplifyToleranceDeg), smoothIterations)),
+    );
 
   ctx.fillStyle = palette.land;
   ctx.strokeStyle = palette.land;
