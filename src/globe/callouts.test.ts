@@ -8,6 +8,7 @@ import {
   preferredSideFor,
   rectsIntersect,
   shouldEndCallout,
+  shouldRefill,
   toOverlaySpace,
 } from "./callouts";
 
@@ -294,5 +295,19 @@ describe("pickOverlapLoser (重なった吹き出しのどちらを消すか)", 
     const a = { shownAt: now - 1000 };
     const b = { shownAt: now - 200 };
     expect(pickOverlapLoser(a, b, now)).toBe(a);
+  });
+});
+
+describe("shouldRefill (アンビエント補充の可否)", () => {
+  it("ambientEnabled が true かつ枠に空きがあれば true", () => {
+    expect(shouldRefill(true, 3, 8)).toBe(true);
+  });
+
+  it("ambientEnabled が false なら枠に空きがあっても false", () => {
+    expect(shouldRefill(false, 3, 8)).toBe(false);
+  });
+
+  it("枠が埋まっていれば ambientEnabled が true でも false", () => {
+    expect(shouldRefill(true, 8, 8)).toBe(false);
   });
 });

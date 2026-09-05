@@ -271,6 +271,18 @@ export const pickRefillCandidate = (
   return best ? { id: best.candidate.id, side: best.side } : null;
 };
 
+/**
+ * 現在の状態からリフィル (空き枠への補充) を試みてよいかどうかを判定する純粋関数。
+ * ピンをクリックして 1 件を強調表示している間 (`ambientEnabled: false`) はアンビエントな
+ * 補充を止め、他の吹き出しが勝手に増えないようにする (自転が再開するまで)。
+ * それ以外は通常どおり、枠が埋まっていなければ補充してよい。
+ */
+export const shouldRefill = (
+  ambientEnabled: boolean,
+  entriesCount: number,
+  maxBubbles: number = MAX_BUBBLES,
+): boolean => ambientEnabled && entriesCount < maxBubbles;
+
 type CalloutEntry = {
   readonly id: string;
   readonly createdAt: number;
@@ -296,6 +308,17 @@ export type CalloutsHandle = Readonly<{
   removeCallout: (id: string) => void;
   /** 全ての吹き出しとプールを即座に取り除く (reset 時に呼ぶ)。 */
   clearAll: () => void;
+  /**
+   * `exceptId` 以外の全ての吹き出しをフェードアウトさせる。ピンをクリックした瞬間に、
+   * 選んだピン以外の吹き出しを即座に閉じるために使う (`display/main.ts` から呼ぶ)。
+   */
+  closeAllExcept: (exceptId: string) => void;
+  /**
+   * アンビエントな自動補充 (`REFILL_INTERVAL_MS` ごとの空き枠補充) の有効/無効を切り替える。
+   * false にすると新規の補充を止める (既存の吹き出しは触らない)。ピン選択中は false にし、
+   * 自転が再開したら true に戻す想定 (`display/main.ts` の `onAutoRotateChange` 参照)。
+   */
+  setAmbientEnabled: (enabled: boolean) => void;
   dispose: () => void;
 }>;
 
@@ -347,6 +370,8 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
   const pool = new Map<string, Post>();
   const lastShownAt = new Map<string, number>();
   let lastRefillAt = 0;
+  /** false の間はアンビエント補充を止める (`setAmbientEnabled` 参照)。 */
+  let ambientEnabled = true;
 
   const removeEntry = (entry: CalloutEntry): void => {
     if (entry.fadeTimer) clearTimeout(entry.fadeTimer);
@@ -369,6 +394,16 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
     for (const entry of [...entries.values()]) removeEntry(entry);
     pool.clear();
     lastShownAt.clear();
+  };
+
+  const closeAllExcept = (exceptId: string): void => {
+    for (const entry of [...entries.values()]) {
+      if (entry.id !== exceptId && !entry.hideTimer) fadeOutAndRemove(entry);
+    }
+  };
+
+  const setAmbientEnabled = (enabled: boolean): void => {
+    ambientEnabled = enabled;
   };
 
   const syncPosts = (posts: readonly Post[]): void => {
@@ -518,7 +553,7 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
   };
 
   const refillOne = (globeRect: Rect): void => {
-    if (entries.size >= MAX_BUBBLES) return;
+    if (!shouldRefill(ambientEnabled, entries.size, MAX_BUBBLES)) return;
     const overlayRect = overlay.getBoundingClientRect();
     // 候補の座標は既存の吹き出し矩形 (style.left/top = overlay 基準) と同じ座標系に揃える。
     const globeCenterX = globeRect.left - overlayRect.left + globeRect.width / 2;
@@ -622,5 +657,14 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
     overlay.remove();
   };
 
-  return { addCallout, trackPost, syncPosts, removeCallout, clearAll, dispose };
+  return {
+    addCallout,
+    trackPost,
+    syncPosts,
+    removeCallout,
+    clearAll,
+    closeAllExcept,
+    setAmbientEnabled,
+    dispose,
+  };
 };

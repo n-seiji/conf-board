@@ -137,6 +137,13 @@ export type GlobeHandle = Readonly<{
   render: () => void;
   /** 自動回転の有効/無効を外部から切り替える (手動操作中の一時停止・アイドル復帰に使う)。 */
   setAutoRotate: (enabled: boolean) => void;
+  /**
+   * `setAutoRotate` の値が実際に変化するたびに呼ばれる購読を登録する (手動操作・
+   * アイドル復帰のどちらの経路でも発火する)。解除関数を返す。ドラッグ/クリックで
+   * 一時停止した自転が再開したタイミングでアンビエントな吹き出し補充を再開する
+   * (`display/main.ts` 参照) のに使う。
+   */
+  onAutoRotateChange: (cb: (enabled: boolean) => void) => () => void;
   /** ピンがクリック/タップで選ばれるたびに呼ばれる購読を登録する。解除関数を返す。 */
   onPinPicked: (cb: (id: string) => void) => () => void;
 }>;
@@ -404,7 +411,10 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     const ndc = worldPos.clone().project(camera);
     const width = container.clientWidth || 1;
     const height = container.clientHeight || 1;
-    return { x: (ndc.x * 0.5 + 0.5) * width, y: (1 - (ndc.y * 0.5 + 0.5)) * height };
+    return {
+      x: (ndc.x * 0.5 + 0.5) * width,
+      y: (1 - (ndc.y * 0.5 + 0.5)) * height,
+    };
   };
 
   const projectPin = (id: string): ProjectedPin | null => {
@@ -422,8 +432,16 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     renderer.render(scene, camera);
   };
 
+  const autoRotateChangeCallbacks = new Set<(enabled: boolean) => void>();
   const setAutoRotate = (enabled: boolean): void => {
+    // 値が実際に変わったときだけ通知する (手動操作中の連続呼び出しで無駄に発火しないように)。
+    if (rig.autoRotate === enabled) return;
     rig.autoRotate = enabled;
+    for (const cb of autoRotateChangeCallbacks) cb(enabled);
+  };
+  const onAutoRotateChange = (cb: (enabled: boolean) => void): (() => void) => {
+    autoRotateChangeCallbacks.add(cb);
+    return () => autoRotateChangeCallbacks.delete(cb);
   };
 
   const pinPickedCallbacks = new Set<(id: string) => void>();
@@ -508,6 +526,7 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     }
     frameCallbacks.clear();
     pinPickedCallbacks.clear();
+    autoRotateChangeCallbacks.clear();
   };
 
   return {
@@ -523,6 +542,7 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     getBounds,
     render,
     setAutoRotate,
+    onAutoRotateChange,
     onPinPicked,
   };
 };

@@ -124,19 +124,28 @@ const main = (): void => {
   const audio = new BoardAudio();
 
   /**
-   * ピンをクリック/タップしたときの流れ:
-   * クリック → 地球が回転してそのピンが画面中央に来る (`centerPin`) →
-   * 回転完了後に吹き出しを強調表示 (`callouts.addCallout`、トースト・音は鳴らさない) →
-   * (`centerPin` 内で `idleResume` を touch するため) そこから 5 秒操作が無ければ自転再開。
-   * 到着演出の `focusPin` と違い、着地アニメーション・波紋は再生しない。
+   * ピンをクリック/タップしたときの流れ (ソロ表示):
+   * クリック → 他の吹き出しを即座に閉じ、以後の自動補充も止める (`closeAllExcept` +
+   * `setAmbientEnabled(false)`) → 地球が回転してそのピンが画面中央に来る (`centerPin`) →
+   * 回転完了後にそのピンだけの吹き出しを強調表示 (`callouts.addCallout`、トースト・音は鳴らさない) →
+   * (`centerPin` 内で `idleResume` を touch するため) そこから 5 秒操作が無ければ自転再開 →
+   * 自転再開 (`onAutoRotateChange(true)`) を合図にアンビエントな自動補充を再開する。
+   * 到着演出の `focusPin` と違い、着地アニメーション・波紋は再生しない。なお、ソロ表示中に
+   * 新規投稿が到着した場合は `focusPin` → `addCallout` がそのまま動くため、到着の吹き出しは
+   * 通常どおり表示される (ソロ状態と競合しない)。
    */
   const postsById = new Map<string, Post>();
   globe.onPinPicked((id) => {
     const post = postsById.get(id);
     if (!post) return;
+    callouts.setAmbientEnabled(false);
+    callouts.closeAllExcept(id);
     globe.centerPin(id, 700, () => {
       callouts.addCallout(post);
     });
+  });
+  globe.onAutoRotateChange((enabled) => {
+    if (enabled) callouts.setAmbientEnabled(true);
   });
 
   // 開発時のみ: ブラウザの devtools から `window.__confBoard.globe.projectPin(id)` 等で
