@@ -50,6 +50,9 @@ type FocusAnimation = Readonly<{
   pinId: string;
   fromY: number;
   toY: number;
+  /** tilt も一緒に動かす場合の開始角・目標角 (rad)。未指定なら spin のみのアニメーション。 */
+  fromTilt?: number;
+  toTilt?: number;
   startedAt: number;
   durationMs: number;
   onArrived?: () => void;
@@ -58,6 +61,8 @@ type FocusAnimation = Readonly<{
 type FocusRequest = Readonly<{
   pinId: string;
   durationMs: number;
+  /** true: 経度 (spin) に加えて緯度 (tilt) も正面中央に合わせる (`startCenterOn` 用)。 */
+  tilt?: boolean;
   onArrived?: () => void;
 }>;
 
@@ -170,6 +175,28 @@ export class GlobeRig {
     this.tryStartNextFocus(nowMs);
   }
 
+  /**
+   * 指定したピンの経度・緯度がともにカメラ正面中央 (法線が (0,0,1)) に来るまで
+   * ease-out で回転する。`focusPin` (到着演出、経度のみ合わせる) と同じキュー・
+   * `focusAnimation` スロットを共有するため、到着演出の最中に呼ばれた場合はその
+   * 完了を待ってから開始し、逆にこのアニメーション中に到着演出が呼ばれた場合は
+   * それがキューに積まれて後から実行される (同時に 2 つは走らない)。
+   * 着地アニメーション・波紋は再生しない (`index.ts` 側でも呼ばない)。
+   */
+  startCenterOn(
+    id: string,
+    nowMs: number,
+    durationMs = DEFAULT_FOCUS_DURATION_MS,
+    onArrived?: () => void,
+  ): void {
+    if (this.focusQueue.length >= MAX_FOCUS_QUEUE) {
+      onArrived?.();
+      return;
+    }
+    this.focusQueue.push({ pinId: id, durationMs, tilt: true, onArrived });
+    this.tryStartNextFocus(nowMs);
+  }
+
   private tryStartNextFocus(nowMs: number): void {
     if (this.focusAnimation) return;
     const next = this.focusQueue.shift();
@@ -189,10 +216,17 @@ export class GlobeRig {
     // 後続が詰まっている間は 1 件あたりの所要時間を短縮して早く追いつく。
     const durationMs =
       this.focusQueue.length > 0 ? Math.min(next.durationMs, BACKLOG_DURATION_MS) : next.durationMs;
+    // startCenterOn (tilt: true) のときだけ、緯度に対応する tiltGroup.rotation.x も合わせて動かす。
+    // localDir.y は latLonToVector3 の定義上 sin(lat) に等しいので、asin で緯度 (rad) に戻せる。
+    const toTilt = next.tilt
+      ? Math.min(MAX_TILT_RAD, Math.max(-MAX_TILT_RAD, Math.asin(pin.localDir.y)))
+      : undefined;
     this.focusAnimation = {
       pinId: next.pinId,
       fromY,
       toY: fromY + delta,
+      fromTilt: next.tilt ? this.tiltGroup.rotation.x : undefined,
+      toTilt,
       startedAt: nowMs,
       durationMs,
       onArrived: next.onArrived,
@@ -209,9 +243,14 @@ export class GlobeRig {
     const angularSpeed = (Math.PI * 2) / ROTATION_PERIOD_SEC;
 
     if (this.focusAnimation) {
-      const { fromY, toY, startedAt, durationMs, onArrived } = this.focusAnimation;
+      const { fromY, toY, fromTilt, toTilt, startedAt, durationMs, onArrived } =
+        this.focusAnimation;
       const t = Math.min(1, (nowMs - startedAt) / durationMs);
-      this.spinGroup.rotation.y = fromY + (toY - fromY) * easeOutCubic(t);
+      const eased = easeOutCubic(t);
+      this.spinGroup.rotation.y = fromY + (toY - fromY) * eased;
+      if (fromTilt !== undefined && toTilt !== undefined) {
+        this.tiltGroup.rotation.x = fromTilt + (toTilt - fromTilt) * eased;
+      }
       if (t >= 1) {
         this.focusAnimation = null;
         this.tiltGroup.updateMatrixWorld(true);

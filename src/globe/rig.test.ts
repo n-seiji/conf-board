@@ -319,3 +319,58 @@ describe("GlobeRig.settleTilt", () => {
     expect(rig.tiltGroup.rotation.x).toBeCloseTo(rig.tiltRad, 2);
   });
 });
+
+describe("GlobeRig.startCenterOn", () => {
+  it("完了後、ピンの world 法線が (0,0,1) になる (spin/tilt とも)", () => {
+    const rig = new GlobeRig();
+    const mesh = makePinMesh();
+    const dir = latLonToVector3(40, 70, 1);
+    mesh.position.copy(dir).multiplyScalar(1.006);
+    rig.addPin("p", mesh, dir);
+
+    rig.startCenterOn("p", 0, 900);
+    rig.tick(0.9, 900);
+
+    const projected = rig.projectPin("p", -1);
+    expect(projected).not.toBeNull();
+    expect(projected?.normal.x ?? 1).toBeCloseTo(0, 6);
+    expect(projected?.normal.y ?? 1).toBeCloseTo(0, 6);
+    expect(projected?.normal.z ?? 0).toBeCloseTo(1, 6);
+  });
+
+  it("緯度80度のピンでは tilt が ±MAX_TILT_DEG (60度) にクランプされる", () => {
+    const rig = new GlobeRig();
+    const mesh = makePinMesh();
+    const dir = latLonToVector3(80, 0, 1);
+    mesh.position.copy(dir).multiplyScalar(1.006);
+    rig.addPin("p", mesh, dir);
+
+    rig.startCenterOn("p", 0, 900);
+    rig.tick(0.9, 900);
+
+    expect(rig.tiltGroup.rotation.x).toBeCloseTo((60 * Math.PI) / 180, 6);
+  });
+
+  it("到着 focus (focusPin) 実行中に呼ぶとキューに積まれ、同時には走らない", () => {
+    const rig = new GlobeRig();
+    for (const id of ["a", "b"]) {
+      const mesh = makePinMesh();
+      const dir = latLonToVector3(0, 90, 1);
+      mesh.position.copy(dir).multiplyScalar(1.006);
+      rig.addPin(id, mesh, dir);
+    }
+
+    const arrivedOrder: string[] = [];
+    rig.focusPin("a", 0, 900, () => arrivedOrder.push("a"));
+    rig.startCenterOn("b", 0, 900, () => arrivedOrder.push("b"));
+
+    rig.tick(0.5, 500);
+    expect(arrivedOrder).toEqual([]); // まだどちらも完了していない (a が実行中)
+
+    rig.tick(0.4, 900);
+    expect(arrivedOrder).toEqual(["a"]); // a 完了、b が開始される
+
+    rig.tick(0.9, 1800);
+    expect(arrivedOrder).toEqual(["a", "b"]);
+  });
+});

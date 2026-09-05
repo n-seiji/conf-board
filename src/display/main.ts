@@ -123,11 +123,20 @@ const main = (): void => {
   const callouts = createCallouts(dom.overlayHost, globe);
   const audio = new BoardAudio();
 
-  // ピンをクリック/タップしたとき、その投稿の吹き出しを表示する (トースト・音は鳴らさない)。
+  /**
+   * ピンをクリック/タップしたときの流れ:
+   * クリック → 地球が回転してそのピンが画面中央に来る (`centerPin`) →
+   * 回転完了後に吹き出しを強調表示 (`callouts.addCallout`、トースト・音は鳴らさない) →
+   * (`centerPin` 内で `idleResume` を touch するため) そこから 5 秒操作が無ければ自転再開。
+   * 到着演出の `focusPin` と違い、着地アニメーション・波紋は再生しない。
+   */
   const postsById = new Map<string, Post>();
   globe.onPinPicked((id) => {
     const post = postsById.get(id);
-    if (post) callouts.addCallout(post);
+    if (!post) return;
+    globe.centerPin(id, 700, () => {
+      callouts.addCallout(post);
+    });
   });
 
   // 開発時のみ: ブラウザの devtools から `window.__confBoard.globe.projectPin(id)` 等で

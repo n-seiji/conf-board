@@ -112,6 +112,12 @@ export type GlobeHandle = Readonly<{
    * 以後は通常の自転に戻る。snapshot 復元済みのピンには使わない (新規投稿の着地演出専用)。
    */
   focusPin: (id: string, durationMs?: number, onArrived?: () => void) => void;
+  /**
+   * クリック/タップされたピンを画面中央 (経度・緯度とも正面) へ回す。着地アニメーション・
+   * 波紋は再生しない、選択演出専用のメソッド。「クリック → 中央へ回転 → onArrived で
+   * 吹き出しを表示 → (呼び出し側で) 5 秒後に自転再開」という流れの、回転部分だけを担う。
+   */
+  centerPin: (id: string, durationMs?: number, onArrived?: () => void) => void;
   dispose: () => void;
   onFrame: (cb: (elapsedSec: number) => void) => () => void;
   /** id のピンの画面座標 (コンテナ基準 px) と、裏側で非表示かどうか。 */
@@ -134,6 +140,8 @@ export type GlobeHandle = Readonly<{
 const IDLE_RESUME_MS = 5000;
 /** ピンのクリック/タップ判定半径 (px)。タッチでも押しやすいよう、実サイズより広めに取る。 */
 const PICK_RADIUS_PX = 18;
+/** `centerPin` の既定所要時間 (ms)。到着演出の `focusPin` (900ms) より短くし、選択操作への応答性を優先する。 */
+const CENTER_PIN_DURATION_MS = 700;
 
 const createRippleMeshes = (): readonly [Mesh, Mesh] => {
   const makeRing = (opacity: number): Mesh => {
@@ -284,6 +292,28 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     rig.focusPin(id, performance.now(), durationMs, () => {
       triggerLanding(id);
       triggerRipple(id);
+      onArrived?.();
+    });
+  };
+
+  /**
+   * クリック/タップされたピンを画面中央へ回す (経度・緯度とも正面に合わせる)。
+   * `focusPin` (新規投稿の到着演出) との違い: 上から落ちる着地アニメーションと波紋を
+   * 再生しない、演出専用の便宜メソッド。回転完了 (`onArrived`) の後に呼び出し側が
+   * 吹き出しを表示する想定 (`display/main.ts` 参照)。到着済みピンをクリックしたときに
+   * 使うため、着地演出はもう不要という前提。
+   * `rig.startCenterOn` は到着 focus と同じキューを共有するので、到着演出と同時に
+   * 走ることはなく、互いに割り込まれず順番に処理される。
+   */
+  const centerPin = (
+    id: string,
+    durationMs = CENTER_PIN_DURATION_MS,
+    onArrived?: () => void,
+  ): void => {
+    rig.startCenterOn(id, performance.now(), durationMs, () => {
+      // 手動操作中と同様、回転が終わって吹き出しが出てから 5 秒のアイドルを数え直す
+      // (吹き出しが出た直後にすぐ自転が再開してしまうのを防ぐ)。
+      idleResume?.touch();
       onArrived?.();
     });
   };
@@ -465,6 +495,7 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     clear,
     setRotationTo,
     focusPin,
+    centerPin,
     dispose,
     onFrame,
     projectPin,
