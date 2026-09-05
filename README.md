@@ -6,14 +6,14 @@ Go カンファレンスのブース展示用アプリ (miive)。参加者がス
 ## セットアップ
 
 ```bash
-npm install
+pnpm install
 cp .dev.vars.example .dev.vars   # ADMIN_TOKEN を設定
 ```
 
 ## 開発
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 `@cloudflare/vite-plugin` により Worker + Durable Object + 静的ページが
@@ -22,7 +22,7 @@ npm run dev
 ## 地球の地域データを再生成する
 
 ```bash
-npm run gen:regions
+pnpm gen:regions
 ```
 
 `src/globe/regions-gen.ts` (`world-atlas` の陸地データを球面 k-means で 20 か国に
@@ -34,14 +34,14 @@ npm run gen:regions
 ## チェック
 
 ```bash
-npm run check   # biome + tsc + vitest
+pnpm check   # biome + tsc + vitest
 ```
 
 ## デプロイ
 
 ```bash
 npx wrangler secret put ADMIN_TOKEN
-npm run deploy   # = vite build && wrangler deploy
+pnpm deploy   # = vite build && wrangler deploy
 ```
 
 ## 画面

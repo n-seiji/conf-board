@@ -3,11 +3,12 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@10.14.0",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "pnpm run build && wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
@@ -35,15 +36,7 @@
     "topojson-client": "^3.1.0",
     "world-atlas": "^2.0.2"
   },
-  "allowScripts": {
-    "@biomejs/biome@1.9.4": true,
-    "workerd@1.20260903.1": true,
-    "esbuild@0.25.4": true,
-    "esbuild@0.25.12": true,
-    "esbuild@0.28.1": true,
-    "sharp@0.33.5": true,
-    "sharp@0.35.2": true,
-    "fsevents@2.3.3": true,
-    "workerd@1.20260815.1": true
+  "pnpm": {
+    "onlyBuiltDependencies": ["@biomejs/biome", "esbuild", "workerd"]
   }
 }
