@@ -276,7 +276,10 @@ export const drawWorld = (ctx: DrawContext, palette: Palette, data: WorldTexture
   ctx.fillRect(0, 0, width, height);
 
   // 面積フィルタは元 (単純化前) のリングで判定し、小島の除外基準を従来どおり保つ。
-  const visiblePolygons = excludePolygonsSouthOf(data.landPolygons)
+  const visiblePolygons = excludePolygonsSouthOf(
+    data.landPolygons,
+    data.southClipLat ?? SOUTH_CLIP_LAT,
+  )
     .filter((polygon) => {
       const outer = polygon[0];
       return outer !== undefined && ringArea(outer) >= minArea;
@@ -293,7 +296,7 @@ export const drawWorld = (ctx: DrawContext, palette: Palette, data: WorldTexture
   for (const polygon of visiblePolygons) {
     tracePolygon(ctx, polygon, width, height);
     ctx.fill("evenodd");
-    ctx.stroke();
+    if (strokeWidth > 0) ctx.stroke();
   }
 
   ctx.strokeStyle = palette.graticule;

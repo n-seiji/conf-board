@@ -11,3 +11,7 @@ prototypes/
 
 # Playwright MCP が確認時に置く一時ファイル
 .playwright-mcp/
+
+# Blender autosaves and the superseded first character prototype
+*.blend1
+/assets/kurita-miive/

@@ -288,6 +288,7 @@ type CalloutEntry = {
   readonly createdAt: number;
   readonly shownAt: number;
   readonly card: HTMLDivElement;
+  readonly newBadge: HTMLSpanElement;
   /** 作成時に決めた側。ピンに追従する間もずっと同じ側を使い、再判定はしない。 */
   readonly side: Side;
   fadeTimer: ReturnType<typeof setTimeout> | null;
@@ -377,6 +378,7 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
     if (entry.fadeTimer) clearTimeout(entry.fadeTimer);
     if (entry.hideTimer) clearTimeout(entry.hideTimer);
     entry.card.remove();
+    globe.setNewBadgeCallout(entry.id, false);
     entries.delete(entry.id);
     // 吹き出しが消えた時刻を記録する (RESHOW_COOLDOWN_MS の起点)。投稿自体が削除された
     // 場合は removeCallout がこの直後に消すので、クールダウン扱いにはならない。
@@ -473,6 +475,11 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
 
   const createEntry = (post: Post, isLatest: boolean, side: Side): CalloutEntry => {
     const card = createCard(post, isLatest);
+    const newBadge = document.createElement("span");
+    newBadge.className = "callout-card__new";
+    newBadge.textContent = "NEW";
+    newBadge.hidden = !globe.setNewBadgeCallout(post.id, true);
+    card.appendChild(newBadge);
     card.classList.add(`callout-card--${side}`);
     overlay.appendChild(card);
 
@@ -481,6 +488,7 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
       createdAt: post.createdAt,
       shownAt: Date.now(),
       card,
+      newBadge,
       side,
       fadeTimer: null,
       hideTimer: null,
@@ -530,6 +538,10 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
     const overlayRect = overlay.getBoundingClientRect();
     const globeCenterX = globeRect.left - overlayRect.left + globeRect.width / 2;
     const projected = globe.projectPin(post.id);
+    if (projected?.selected) {
+      createEntry(post, true, "top");
+      return;
+    }
     let side: Side = "right";
     if (projected) {
       const pin = toOverlaySpace(projected.x, projected.y, globeRect, overlayRect);
@@ -620,6 +632,8 @@ export const createCallouts = (container: HTMLElement, globe: GlobeHandle): Call
     const globeRect = globe.getBounds();
     const overlayRect = overlay.getBoundingClientRect();
     for (const entry of entries.values()) {
+      // フェード中も期限を同期し、実際にカードを外すまで頭上には戻さない。
+      entry.newBadge.hidden = !globe.setNewBadgeCallout(entry.id, true);
       // すでにフェードアウト中 (hideTimer 予約済み) なら、そのタイマーに任せて何もしない。
       if (entry.hideTimer) continue;
 

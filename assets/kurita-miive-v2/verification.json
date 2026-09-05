@@ -1,0 +1,13 @@
+{
+  "glb_roundtrip": "passed",
+  "mesh_objects": 20,
+  "closed_character_volumes": 10,
+  "materials": 6,
+  "all_materials_unlit": true,
+  "embedded_images": 1,
+  "external_dependencies": false,
+  "height_to_head_ratio": 2.0039,
+  "dimensions": [1.5425, 1.15, 3.0829],
+  "rigged": false,
+  "size_bytes": 5568544
+}

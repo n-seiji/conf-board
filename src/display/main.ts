@@ -1,4 +1,6 @@
 import QRCode from "qrcode";
+import { createConfetti } from "./confetti";
+import { MilestoneState } from "./milestone";
 import { BoardAudio } from "../globe/audio";
 import { createCallouts } from "../globe/callouts";
 import { MAX_PIN_MESHES, createGlobe } from "../globe/index";
@@ -34,6 +36,7 @@ const buildDom = (
   qrImg: HTMLImageElement;
   soundToggle: HTMLButtonElement;
   sparklesHost: HTMLDivElement;
+  heading: HTMLDivElement;
 }> => {
   root.innerHTML = "";
   const screen = document.createElement("div");
@@ -60,7 +63,7 @@ const buildDom = (
   const heading = document.createElement("div");
   heading.className = "display-heading";
   heading.innerHTML = `
-    <p class="display-heading__sub">こんな福利厚生、欲しい!</p>
+    <p class="display-heading__sub">気に入っている福利厚生は？<br />こんな福利厚生がほしい！</p>
     <p class="display-heading__main">働く意味で、世界を満たす。</p>
   `;
   stage.appendChild(heading);
@@ -111,6 +114,7 @@ const buildDom = (
     qrImg,
     soundToggle,
     sparklesHost,
+    heading,
   };
 };
 
@@ -119,9 +123,44 @@ const main = (): void => {
   if (!app) return;
 
   const dom = buildDom(app);
+  // Reserve the heading's actual height, including late font loads and wrapping.
+  // Callouts already convert coordinates into their overlay's local space.
+  const reserveHeadingSpace = () => {
+    dom.overlayHost.style.top = `${dom.heading.offsetTop + dom.heading.offsetHeight + 16}px`;
+  };
+  reserveHeadingSpace();
+  const headingObserver = new ResizeObserver(reserveHeadingSpace);
+  headingObserver.observe(dom.heading);
+  headingObserver.observe(dom.stage);
   const globe = createGlobe(dom.globeWrap, { interactive: true });
   const callouts = createCallouts(dom.overlayHost, globe);
   const audio = new BoardAudio();
+  const milestone = new MilestoneState();
+  const viewToggle = document.createElement("button");
+  viewToggle.type = "button";
+  viewToggle.className = "display-view-toggle";
+  viewToggle.hidden = true;
+  dom.stage.appendChild(viewToggle);
+  let showingMessage = false;
+  const applyMessageMode = () => {
+    viewToggle.hidden = !milestone.available;
+    viewToggle.textContent = milestone.message ? "地球に戻る" : "メッセージを見る";
+    viewToggle.setAttribute("aria-pressed", String(milestone.message));
+    if (showingMessage === milestone.message) return;
+    showingMessage = milestone.message;
+    globe.setMessageMode(showingMessage);
+    dom.overlayHost.hidden = showingMessage;
+    callouts.setAmbientEnabled(!showingMessage);
+    if (showingMessage) dom.toast.classList.remove("display-toast--visible");
+  };
+  viewToggle.onclick = () => {
+    milestone.toggle();
+    applyMessageMode();
+  };
+  globe.onFrame(() => {
+    milestone.tick(performance.now());
+    applyMessageMode();
+  });
 
   /**
    * ピンをクリック/タップしたときの流れ (ソロ表示):
@@ -145,7 +184,7 @@ const main = (): void => {
     });
   });
   globe.onAutoRotateChange((enabled) => {
-    if (enabled) callouts.setAmbientEnabled(true);
+    if (enabled && !milestone.message) callouts.setAmbientEnabled(true);
   });
 
   // 開発時のみ: ブラウザの devtools から `window.__confBoard.globe.projectPin(id)` 等で
@@ -212,7 +251,10 @@ const main = (): void => {
     }
   };
 
+  const confetti = createConfetti(dom.sparklesHost);
   const celebrate = (): void => {
+    milestone.celebrate(performance.now());
+    confetti.play();
     dom.globeWrap.classList.remove("globe-wrap--celebrate");
     // reflow してアニメーションを再トリガーできるようにする。
     void dom.globeWrap.offsetWidth;
@@ -227,6 +269,8 @@ const main = (): void => {
 
   const setCounter = (total: number): void => {
     dom.counterValue.textContent = String(total);
+    milestone.sync(total);
+    applyMessageMode();
   };
 
   /**
@@ -257,11 +301,13 @@ const main = (): void => {
       knownIds.add(post.id);
       postsById.set(post.id, post);
       callouts.trackPost(post);
-      // 自転を正面に合わせてから波紋・吹き出し・音を出す (裏側に着地した場合の対策)。
+      // 自転を邪魔せず、裏側から新しいGopherが登場した時に吹き出し・音を出す。
       globe.focusPin(post.id, 900, () => {
+        if (milestone.message) return;
         callouts.addCallout(post);
         audio.playLanding();
-        showToast(`また世界がひとつ満たされました! (${getCountryName(post.countryId)})`);
+        if (!milestone.available)
+          showToast(`また世界がひとつ満たされました! (${getCountryName(post.countryId)})`);
       });
     }
     setCounter(total);
@@ -288,6 +334,7 @@ const main = (): void => {
       setCounter(total);
     },
     onReset: () => {
+      confetti.dispose();
       globe.clear();
       callouts.clearAll();
       knownIds = new Set();
@@ -299,6 +346,8 @@ const main = (): void => {
   socket.connect();
 
   window.addEventListener("beforeunload", () => {
+    headingObserver.disconnect();
+    confetti.dispose();
     socket.close();
     callouts.dispose();
     globe.dispose();

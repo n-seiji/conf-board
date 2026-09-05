@@ -1,0 +1,17 @@
+.gopher-credit {
+  position: fixed;
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  z-index: 20;
+  max-width: calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+  margin: 0;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 82%);
+  color: #34534e;
+  font:
+    400 10px/1.4 system-ui,
+    sans-serif;
+  text-align: right;
+  pointer-events: none;
+}

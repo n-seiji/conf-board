@@ -1,8 +1,6 @@
 import { CanvasTexture, SRGBColorSpace } from "three";
 import { loadLandPolygons } from "./land-data";
-import type { RegionsData } from "./regions-gen";
-import regionsData from "./regions.json";
-import { type WorldTextureData, buildBorderSegments, drawWorld, readPalette } from "./texture";
+import { type WorldTextureData, drawWorld } from "./texture";
 
 const TEXTURE_WIDTH = 2048;
 const TEXTURE_HEIGHT = 1024;
@@ -15,15 +13,29 @@ export const createWorldTexture = (): CanvasTexture => {
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("2D context を取得できませんでした");
 
-  const regions = regionsData as unknown as RegionsData;
   const data: WorldTextureData = {
     landPolygons: loadLandPolygons(),
-    borderSegments: buildBorderSegments(regions.cells),
+    borderSegments: [],
     width: TEXTURE_WIDTH,
     height: TEXTURE_HEIGHT,
+    minPolygonArea: 0,
+    roundStrokeWidth: 0,
+    simplifyToleranceDeg: 0,
+    smoothIterations: 0,
+    southClipLat: -90,
+    northClipLat: 90,
   };
 
-  drawWorld(ctx, readPalette(), data);
+  drawWorld(
+    ctx,
+    {
+      ocean: "#568c9d",
+      land: "#c9d5ad",
+      border: "transparent",
+      graticule: "rgba(210,235,240,0.18)",
+    },
+    data,
+  );
 
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;

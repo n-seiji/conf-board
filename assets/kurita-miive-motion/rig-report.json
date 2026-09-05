@@ -1,0 +1,112 @@
+{
+  "bones": 12,
+  "meshes": [
+    {
+      "mesh": "Head and hair \u2022 illustrated smile",
+      "vertices": 26626
+    },
+    {
+      "mesh": "Left arm and hand \u2022 seamless",
+      "vertices": 6658
+    },
+    {
+      "mesh": "Left ear",
+      "vertices": 5122
+    },
+    {
+      "mesh": "Left ear inner fold",
+      "vertices": 407
+    },
+    {
+      "mesh": "Left mitten thumb",
+      "vertices": 275
+    },
+    {
+      "mesh": "Left sneaker",
+      "vertices": 6658
+    },
+    {
+      "mesh": "Neck \u2022 mostly concealed",
+      "vertices": 6146
+    },
+    {
+      "mesh": "Right arm and hand \u2022 seamless",
+      "vertices": 6658
+    },
+    {
+      "mesh": "Right ear",
+      "vertices": 5122
+    },
+    {
+      "mesh": "Right ear inner fold",
+      "vertices": 275
+    },
+    {
+      "mesh": "Right mitten thumb",
+      "vertices": 275
+    },
+    {
+      "mesh": "Right sneaker",
+      "vertices": 6658
+    },
+    {
+      "mesh": "Sneaker lace",
+      "vertices": 275
+    },
+    {
+      "mesh": "Sneaker lace.001",
+      "vertices": 275
+    },
+    {
+      "mesh": "Sneaker lace.002",
+      "vertices": 275
+    },
+    {
+      "mesh": "Sneaker lace.003",
+      "vertices": 275
+    },
+    {
+      "mesh": "Sneaker sole seam",
+      "vertices": 539
+    },
+    {
+      "mesh": "Sneaker sole seam.001",
+      "vertices": 539
+    },
+    {
+      "mesh": "T-shirt \u2022 continuous shoulders and sleeves",
+      "vertices": 14594
+    },
+    {
+      "mesh": "Trousers \u2022 continuous waist and legs",
+      "vertices": 15362
+    }
+  ],
+  "clips": [
+    {
+      "clip": "Wave",
+      "duration_seconds": 3.2,
+      "endpoint_error": 0.0
+    },
+    {
+      "clip": "Bow",
+      "duration_seconds": 2.8,
+      "endpoint_error": 0.0
+    },
+    {
+      "clip": "Nod",
+      "duration_seconds": 2.4,
+      "endpoint_error": 0.0
+    },
+    {
+      "clip": "Jump",
+      "duration_seconds": 2.8,
+      "endpoint_error": 0.0
+    },
+    {
+      "clip": "Dance",
+      "duration_seconds": 3.2,
+      "endpoint_error": 0.0
+    }
+  ]
+}

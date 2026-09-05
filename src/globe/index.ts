@@ -6,8 +6,10 @@ import {
   HemisphereLight,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   type Object3D,
   PerspectiveCamera,
+  Quaternion,
   RingGeometry,
   Scene,
   SphereGeometry,
@@ -22,10 +24,28 @@ import {
   createIdleResume,
   nearestPinWithin,
 } from "./interaction";
-import { PIN_HEIGHT, createPinObject, orientPinToNormal } from "./pin-mesh";
-import { pinLatLon } from "./pins";
-import { DEFAULT_FOCUS_DURATION_MS, GlobeRig, TILT_DEG, latLonToVector3 } from "./rig";
+import { orientPinToNormal } from "./pin-mesh";
+import { createGopherPins } from "./gopher-pins";
+import { createRenPins, isRenPost } from "./ren-pins";
+import { fallingPosition } from "./arrival";
+import {
+  advanceNewGopher,
+  dismissNewGopher,
+  newGopherState,
+  newBadgePlacement,
+  type NewGopherState,
+} from "./new-gopher";
+import { createNewBadges } from "./new-badge";
+import { spacedPinLatLon, type OccupiedPin } from "./pins";
+import {
+  DEFAULT_FOCUS_DURATION_MS,
+  GlobeRig,
+  TILT_DEG,
+  ROTATION_PERIOD_SEC,
+  latLonToVector3,
+} from "./rig";
 import { createWorldTexture } from "./world-texture";
+import { createMessageGlobe } from "./message-globe";
 
 export { latLonToVector3, TILT_DEG, frontFacingAngle } from "./rig";
 
@@ -36,10 +56,10 @@ const RIPPLE_SURFACE_OFFSET = 1.002;
 export const MAX_PIN_MESHES = 200;
 const CAMERA_FOV = 25;
 /**
- * カメラから球の中心までの距離。球が canvas の短辺の約 75% に収まるようにする
- * (5 だと 90% になり、縁に立つ 3D ピンの頭が canvas の外にはみ出て切れる)。
+ * 球がcanvasの短辺の約66%に収まる距離。従来の3倍高いGopherが
+ * 地球の縁に立っても、初期ズームでは頭が切れにくい余白を確保する。
  */
-const CAMERA_DISTANCE = 6;
+const CAMERA_DISTANCE = 6.8;
 /** 半分の視野角 (rad)。透視投影の画面占有率の計算で使う。 */
 const HALF_FOV_RAD = (CAMERA_FOV / 2) * (Math.PI / 180);
 /**
@@ -58,9 +78,6 @@ const RIPPLE_INNER_START = 0.04;
 const RIPPLE_OUTER_START = 0.3;
 /** 外側の波紋リングを内側より遅らせて開始する時間 (ms)。同時開始だと重なって1本に見えるため。 */
 const RIPPLE_OUTER_DELAY_MS = 150;
-/** 着地演出: 上から落ちてくる分の追加オフセット (球面からの距離)。focusPin 完了時に 0 まで縮む。 */
-const LANDING_START_EXTRA = 0.25;
-const LANDING_DURATION_MS = 400;
 /**
  * 法線とカメラ方向の内積がこれ未満なら裏側とみなし非表示にする (吹き出し・リーダー線用)。
  * 仕様上の裏側判定は 0.05 (ほぼ真横) だが、その値では球の縁 (limb) 付近で
@@ -70,20 +87,19 @@ const LANDING_DURATION_MS = 400;
  */
 const BACKSIDE_DOT_THRESHOLD = 0.15;
 
-const easeInCubic = (t: number): number => t ** 3;
-
 type Ripple = Readonly<{
   meshes: readonly [Mesh, Mesh];
   startedAt: number;
 }>;
 
-type Landing = Readonly<{
-  startedAt: number;
-}>;
-
 type PinMeta = {
   ripple: Ripple | null;
-  landing: Landing | null;
+  arrived: boolean;
+  ren: boolean;
+  fallStarted?: number;
+  fresh: NewGopherState | null;
+  onArrived?: () => void;
+  badge?: ReturnType<ReturnType<typeof createNewBadges>["create"]>;
 };
 
 export type GlobeOptions = Readonly<{
@@ -104,28 +120,30 @@ export type ProjectedPin = Readonly<{
   visible: boolean;
   /** カメラ方向との内積 (1: 正面中央、0: 真横、負値: 裏側)。リフィル候補の残り表示時間の見積もりに使う。 */
   dot: number;
+  selected?: boolean;
 }>;
 
 export type AddPinOptions = Readonly<{
   /**
-   * true (既定値): 新規投稿として扱う。初期位置を球面よりわずかに浮かせて配置し、
-   * `focusPin` が完了した瞬間に「上から落ちて刺さる」着地アニメーション (400ms ease-in) と
-   * 波紋を再生する。
-   * false: snapshot 復元用。初期位置から浮かせず、着地アニメーション無しで即座に最終位置へ
-   * 静止表示する。
+   * true (既定値): 新規投稿。モデルの準備ができ次第、配置先にNEW付きで登場。
+   * 登場するまでは吹き出し・クリックの対象にしない。
+   * false: snapshot復元。即座に地表へ配置し、通常の動きをループ再生する。
    */
   animate?: boolean;
 }>;
 
 export type GlobeHandle = Readonly<{
-  addPin: (post: Pick<Post, "id" | "countryId" | "color">, options?: AddPinOptions) => void;
+  /** 静止した立体メッセージ球と通常の地球を切り替える。投稿は保持する。 */
+  setMessageMode: (visible: boolean) => void;
+  /** 吹き出し表示中は頭上のNEWを隠す。吹き出し側にNEWを表示すべきならtrue。 */
+  setNewBadgeCallout: (id: string, visible: boolean) => boolean;
+  addPin: (post: Pick<Post, "id" | "countryId" | "color" | "seq">, options?: AddPinOptions) => void;
   removePin: (id: string) => void;
   clear: () => void;
   setRotationTo: (lat: number, lon: number) => void;
   /**
-   * 指定したピンの経度が正面 (カメラ方向) に来るまで自転を ease-out で回し、
-   * 正面に到達した時点で着地アニメーション・波紋を再生して `onArrived` を呼ぶ。
-   * 以後は通常の自転に戻る。snapshot 復元済みのピンには使わない (新規投稿の着地演出専用)。
+   * 新規Gopherが配置先へ登場した時の通知を登録する。
+   * 互換性のため名前・引数を維持するが、強制回転・落下は行わずdurationMsは未使用。
    */
   focusPin: (id: string, durationMs?: number, onArrived?: () => void) => void;
   /**
@@ -136,7 +154,7 @@ export type GlobeHandle = Readonly<{
   centerPin: (id: string, durationMs?: number, onArrived?: () => void) => void;
   dispose: () => void;
   onFrame: (cb: (elapsedSec: number) => void) => () => void;
-  /** id のピンの画面座標 (コンテナ基準 px) と、裏側で非表示かどうか。 */
+  /** 動くGopherの頭の画面座標 (コンテナ基準px)。裏側・登場前はvisible=false。 */
   projectPin: (id: string) => ProjectedPin | null;
   /** 地球を描画しているコンテナ要素の画面上の矩形 (吹き出しの列位置決めに使う)。 */
   getBounds: () => DOMRect;
@@ -209,22 +227,82 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
   container.appendChild(renderer.domElement);
 
   const rig = new GlobeRig(TILT_DEG);
+  let messageMode = false;
+  let messageStarted = 0;
+  let messageGlobe: ReturnType<typeof createMessageGlobe> | null = null;
   rig.autoRotate = options.autoRotate ?? true;
   scene.add(rig.tiltGroup);
 
   const sphereGeometry = new SphereGeometry(SPHERE_RADIUS, 64, 64);
-  const sphereMaterial = new MeshBasicMaterial({ map: createWorldTexture() });
+  const sphereMaterial = new MeshStandardMaterial({ map: createWorldTexture(), roughness: 0.85 });
   const sphereMesh = new Mesh(sphereGeometry, sphereMaterial);
   rig.spinGroup.add(sphereMesh);
 
-  // ピンを 3D メッシュ化したことで陰影が付くようにする (球自体は MeshBasicMaterial なので見た目は変わらない)。
-  const hemisphereLight = new HemisphereLight("#ffffff", "#c8f0dc", 1.2);
-  const directionalLight = new DirectionalLight("#ffffff", 1.0);
+  // 地球とGopherに柔らかな昼光の陰影を付ける。
+  const hemisphereLight = new HemisphereLight("#fffdf0", "#778c93", 2);
+  const directionalLight = new DirectionalLight("#fff5de", 3.3);
   directionalLight.position.set(2, 3, 4);
   scene.add(hemisphereLight, directionalLight);
 
+  const gophers = createGopherPins();
+  const rens = createRenPins();
+  const charactersFor = (id: string) => (pinMeta.get(id)?.ren ? rens : gophers);
+  const newBadges = createNewBadges();
+  let modelsReady = false;
+  void Promise.all([gophers.ready, rens.ready]).then(() => {
+    modelsReady = true;
+    if (rens.error) console.warn("Ren model unavailable; using colored pins.", rens.error);
+    if (gophers.error) console.warn("Gopher model unavailable; using colored pins.", gophers.error);
+  });
+
   const pinMeta = new Map<string, PinMeta>();
   const pinOrder: string[] = [];
+  let selectedPinId: string | null = null;
+  const uprightRotation = new Quaternion();
+  const updateSelectedPose = (): void => {
+    if (!selectedPinId) return;
+    const pin = rig.getPin(selectedPinId);
+    if (!pin) return;
+    // Camera is fixed on +Z: identity in world space gives feet-down, head-up,
+    // face-forward for either character while the foot position stays fixed.
+    pin.object.quaternion.copy(rig.pinsGroup.getWorldQuaternion(uprightRotation).invert());
+    pin.object.updateWorldMatrix(true, true);
+  };
+  const selectPose = (id: string | null): void => {
+    if (selectedPinId) {
+      const old = rig.getPin(selectedPinId);
+      if (old) {
+        orientPinToNormal(old.object, old.localDir);
+        old.object.traverse((o) => {
+          if (o instanceof Mesh) o.layers.set(0);
+        });
+      }
+    }
+    selectedPinId = id;
+    if (id)
+      rig.getPin(id)?.object.traverse((o) => {
+        if (o instanceof Mesh) o.layers.set(1);
+      });
+    updateSelectedPose();
+  };
+
+  hemisphereLight.layers.enable(1);
+  directionalLight.layers.enable(1);
+  const renderScene = (): void => {
+    renderer.autoClear = true;
+    camera.layers.set(0);
+    renderer.render(scene, camera);
+    if (selectedPinId && !messageMode) {
+      // Only the inspected character is foreground; normal pins still share depth.
+      renderer.autoClear = false;
+      renderer.clearDepth();
+      camera.layers.set(1);
+      renderer.render(scene, camera);
+      camera.layers.set(0);
+      renderer.autoClear = true;
+    }
+  };
+
   const frameCallbacks = new Set<(elapsedSec: number) => void>();
 
   /** 現在のズーム倍率 (1 = 既定)。カメラ距離は `CAMERA_DISTANCE / zoom` (ズームが大きいほど近づく)。 */
@@ -254,8 +332,10 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
 
   const removePinInternal = (id: string): void => {
     const meta = pinMeta.get(id);
-    // ピンのジオメトリ・マテリアルは colorId ごとに共有しているため dispose しない
-    // (rig.removePin が pinsGroup から remove するだけで十分)。
+    if (selectedPinId === id) selectPose(null);
+    meta?.badge?.dispose();
+    // 個体の色・骨・ミキサーを解放。共有モデルは地球のdisposeまで保持する。
+    charactersFor(id).remove(id);
     rig.removePin(id);
     if (meta?.ripple) {
       for (const m of meta.ripple.meshes) {
@@ -274,21 +354,34 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
   };
 
   const addPin = (
-    post: Pick<Post, "id" | "countryId" | "color">,
+    post: Pick<Post, "id" | "countryId" | "color" | "seq">,
     addOptions: AddPinOptions = {},
   ): void => {
     if (rig.getPin(post.id)) return;
-    const [lat, lon] = pinLatLon(post);
+    const ren = isRenPost(post.seq);
+    const occupied: OccupiedPin[] = [];
+    for (const [id, meta] of pinMeta) {
+      const existing = rig.getPin(id);
+      if (existing)
+        occupied.push({ direction: existing.localDir, radius: meta.ren ? 0.156 : 0.12 });
+    }
+    const [lat, lon] = spacedPinLatLon(post, occupied, ren ? 0.156 : 0.12);
     const dir = latLonToVector3(lat, lon, 1);
     const willAnimate = addOptions.animate ?? true;
 
-    const object = createPinObject(post.color, pinColorHex(post.color));
+    const object = (ren ? rens : gophers).create(post.id, post.color, pinColorHex(post.color));
     orientPinToNormal(object, dir);
     const restDistance = SPHERE_RADIUS;
-    setPinDistance(object, dir, restDistance + (willAnimate ? LANDING_START_EXTRA : 0));
+    setPinDistance(object, dir, restDistance);
+    object.visible = !willAnimate;
 
     rig.addPin(post.id, object, dir);
-    pinMeta.set(post.id, { ripple: null, landing: null });
+    pinMeta.set(post.id, {
+      ripple: null,
+      ren,
+      arrived: !willAnimate,
+      fresh: willAnimate ? newGopherState() : null,
+    });
     pinOrder.push(post.id);
     while (pinOrder.length > MAX_PIN_MESHES) {
       const oldest = pinOrder[0];
@@ -320,58 +413,107 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     meta.ripple = { meshes: [inner, outer], startedAt: performance.now() };
   };
 
-  const triggerLanding = (id: string): void => {
-    const meta = pinMeta.get(id);
-    if (!meta) return;
-    meta.landing = { startedAt: performance.now() };
-  };
-
   const focusPin = (
     id: string,
-    durationMs = DEFAULT_FOCUS_DURATION_MS,
+    _durationMs = DEFAULT_FOCUS_DURATION_MS,
     onArrived?: () => void,
   ): void => {
-    rig.focusPin(id, performance.now(), durationMs, () => {
-      triggerLanding(id);
-      triggerRipple(id);
-      onArrived?.();
-    });
+    // Compatibility with callers: arrival is passive now, never force-spin or drop.
+    const meta = pinMeta.get(id);
+    if (!meta) return;
+    if (meta.arrived) onArrived?.();
+    else meta.onArrived = onArrived;
   };
 
   /**
    * クリック/タップされたピンを画面中央へ回す (経度・緯度とも正面に合わせる)。
-   * `focusPin` (新規投稿の到着演出) との違い: 上から落ちる着地アニメーションと波紋を
-   * 再生しない、演出専用の便宜メソッド。回転完了 (`onArrived`) の後に呼び出し側が
-   * 吹き出しを表示する想定 (`display/main.ts` 参照)。到着済みピンをクリックしたときに
-   * 使うため、着地演出はもう不要という前提。
-   * `rig.startCenterOn` は到着 focus と同じキューを共有するので、到着演出と同時に
-   * 走ることはなく、互いに割り込まれず順番に処理される。
+   * 選択操作だけは正面合わせを行う。新規投稿の受信では回転を変えない。
+   * 回転後に腰から見上げ、呼び出し側で吹き出しを表示する。
    */
+  const dismissPinNew = (id: string): void => {
+    const meta = pinMeta.get(id);
+    if (meta?.fresh) dismissNewGopher(meta.fresh);
+    meta?.badge?.dispose();
+    if (meta) {
+      meta.badge = undefined;
+      meta.fresh = null;
+    }
+  };
+
   const centerPin = (
     id: string,
     durationMs = CENTER_PIN_DURATION_MS,
     onArrived?: () => void,
   ): void => {
+    if (messageMode) return;
+    dismissPinNew(id);
+    selectPose(null);
+    gophers.lookUp(null);
+    rens.lookUp(null);
     rig.startCenterOn(id, performance.now(), durationMs, () => {
       // 手動操作中と同様、回転が終わって吹き出しが出てから 5 秒のアイドルを数え直す
       // (吹き出しが出た直後にすぐ自転が再開してしまうのを防ぐ)。
       idleResume?.touch();
+      selectPose(id);
+      charactersFor(id).lookUp(id, false);
+      charactersFor(id).react(id);
       onArrived?.();
     });
   };
 
-  const updateLanding = (now: number): void => {
+  const setNewBadgeCallout = (id: string, visible: boolean): boolean => {
+    const meta = pinMeta.get(id);
+    const placement = newBadgePlacement(meta?.fresh ?? null, visible);
+    meta?.badge?.setLabelVisible(placement === "head");
+    return placement === "callout";
+  };
+
+  const updateNewGophers = (now: number, autoRotation: number): void => {
     for (const [id, meta] of pinMeta) {
-      if (!meta.landing) continue;
-      const pin = rig.getPin(id);
-      if (!pin) {
-        meta.landing = null;
-        continue;
+      const front = rig.projectPin(id, BACKSIDE_DOT_THRESHOLD)?.visible ?? false;
+      if (meta.ren && meta.arrived) {
+        const object = rig.getPin(id)?.object;
+        if (object) object.visible = front;
       }
-      const t = Math.min(1, (now - meta.landing.startedAt) / LANDING_DURATION_MS);
-      const extra = LANDING_START_EXTRA * (1 - easeInCubic(t));
-      setPinDistance(pin.object, pin.localDir, SPHERE_RADIUS + extra);
-      if (t >= 1) meta.landing = null;
+      if (!meta.fresh || !modelsReady) continue;
+      const pin = rig.getPin(id);
+      if (!pin) continue;
+      const projected = rig.projectPin(id, BACKSIDE_DOT_THRESHOLD);
+      if (meta.ren && meta.fresh.phase === "pending") {
+        // Wait until the destination faces the audience, then fall in screen-up space.
+        if (!front && meta.fallStarted === undefined) continue;
+        meta.fallStarted ??= now;
+        const progress = Math.min(1, (now - meta.fallStarted) / 1100);
+        rig.pinsGroup.updateWorldMatrix(true, false);
+        const surface = rig.pinsGroup.localToWorld(
+          pin.localDir.clone().multiplyScalar(SPHERE_RADIUS),
+        );
+        pin.object.position.copy(rig.pinsGroup.worldToLocal(fallingPosition(surface, progress)));
+        pin.object.visible = front;
+        if (progress < 1) continue;
+        setPinDistance(pin.object, pin.localDir, SPHERE_RADIUS);
+      }
+      if (advanceNewGopher(meta.fresh, autoRotation)) {
+        meta.arrived = true;
+        pin.object.visible = true;
+        meta.badge = newBadges.create();
+        scene.add(meta.badge.group);
+        charactersFor(id).react(id);
+        triggerRipple(id);
+        const callback = meta.onArrived;
+        meta.onArrived = undefined;
+        callback?.();
+      }
+      if (meta.fresh.phase === "done") {
+        meta.badge?.dispose();
+        meta.badge = undefined;
+        meta.fresh = null;
+      } else if (meta.badge) {
+        const head = charactersFor(id).headPosition(id);
+        if (head) meta.badge.group.position.copy(head).add(new Vector3(0, 0.075, 0));
+        meta.badge.group.visible = !messageMode && (projected?.visible ?? false);
+        meta.badge.update(now / 1000);
+      }
     }
   };
 
@@ -420,15 +562,30 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
 
     // rig.tick は内部で updateMatrixWorld まで済ませるため、この後の
     // (focus 完了時に呼ばれる) onArrived コールバック内の projectPin も常に最新の位置を読める。
-    rig.tick(dt, now);
-    updateLanding(now);
+    const autoRotation =
+      !messageMode && rig.autoRotate && !rig.isFocusing()
+        ? (Math.max(0, dt) * Math.PI * 2) / ROTATION_PERIOD_SEC
+        : 0;
+    if (!messageMode) rig.tick(dt, now);
     updateRipples(now);
+    if (!messageMode) {
+      gophers.update(dt);
+      rens.update(dt);
+    }
+    updateSelectedPose();
+    updateNewGophers(now, autoRotation);
+    if (messageMode)
+      messageGlobe?.update(
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? 2
+          : (now - messageStarted) / 1000,
+      );
     // 自転中のみ、ズームを既定 (1倍) へ指数関数的に戻す (`GlobeRig.settleTilt` と同じ考え方)。
     if (rig.autoRotate && zoom !== MIN_ZOOM) {
       const factor = 1 - Math.exp(-dt * ZOOM_SETTLE_RATE);
       setZoom(zoom + (MIN_ZOOM - zoom) * factor);
     }
-    renderer.render(scene, camera);
+    renderScene();
 
     for (const cb of frameCallbacks) cb(now / 1000);
     rafId = requestAnimationFrame(tick);
@@ -456,26 +613,64 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     const projected = rig.projectPin(id, BACKSIDE_DOT_THRESHOLD);
     if (!pin || !projected) return null;
 
-    const { x, y } = toScreen(pin.object.getWorldPosition(new Vector3()));
-    return { x, y, visible: projected.visible, dot: projected.dot };
+    const head = charactersFor(id).headPosition(id);
+    if (!head) return null;
+    const { x, y } = toScreen(head);
+    return {
+      x,
+      y,
+      visible: !messageMode && projected.visible && (pinMeta.get(id)?.arrived ?? false),
+      dot: projected.dot,
+      selected: selectedPinId === id,
+    };
   };
 
   const getBounds = (): DOMRect => container.getBoundingClientRect();
 
   const render = (): void => {
-    renderer.render(scene, camera);
+    renderScene();
   };
 
   const autoRotateChangeCallbacks = new Set<(enabled: boolean) => void>();
   const setAutoRotate = (enabled: boolean): void => {
+    if (messageMode) enabled = false;
     // 値が実際に変わったときだけ通知する (手動操作中の連続呼び出しで無駄に発火しないように)。
     if (rig.autoRotate === enabled) return;
     rig.autoRotate = enabled;
+    if (enabled) {
+      selectPose(null);
+      gophers.lookUp(null);
+      rens.lookUp(null);
+    }
     for (const cb of autoRotateChangeCallbacks) cb(enabled);
   };
   const onAutoRotateChange = (cb: (enabled: boolean) => void): (() => void) => {
     autoRotateChangeCallbacks.add(cb);
     return () => autoRotateChangeCallbacks.delete(cb);
+  };
+
+  const setMessageMode = (visible: boolean): void => {
+    if (visible === messageMode) return;
+    if (visible && !messageGlobe) {
+      messageGlobe = createMessageGlobe();
+      scene.add(messageGlobe.group);
+    }
+    if (visible) selectPose(null);
+    messageMode = visible;
+    messageStarted = performance.now();
+    rig.tiltGroup.visible = !visible;
+    if (messageGlobe) {
+      messageGlobe.group.visible = visible;
+      messageGlobe.update(0);
+    }
+    renderer.domElement.style.pointerEvents = visible ? "none" : "";
+    renderer.domElement.setAttribute(
+      "aria-label",
+      visible ? "働く意味で、世界を満たす。立体メッセージ" : "投稿の地球儀",
+    );
+    for (const meta of pinMeta.values()) if (meta.badge) meta.badge.group.visible = false;
+    setZoom(1);
+    setAutoRotate(!visible);
   };
 
   const pinPickedCallbacks = new Set<(id: string) => void>();
@@ -487,27 +682,45 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
   // interactive: true のときだけドラッグ/ホイール操作とピンのクリック選択を有効にする
   // (スマホの到着画面は演出専用のため既定では無効)。
   // ピックは 3D レイキャストではなく画面座標上の最近傍探索で行う。ピンの見た目
-  // (現状は細いコーン、将来はキャラクター glTF に差し替え予定) に依存せず、
+  // (Gopher GLB、読み込み中はフォールバックのピン) に依存せず、
   // 自転中でも押しやすいタップ/クリック判定になる (`nearestPinWithin` 参照)。
   const pickPinAt = (clientX: number, clientY: number): string | null => {
     const rect = container.getBoundingClientRect();
     const px = clientX - rect.left;
     const py = clientY - rect.top;
-    // ピンは先端 (球面上) から頭 (法線方向に PIN_HEIGHT) までの線分として見えるので、
-    // クリック位置に最も近い線分上の点を候補座標にする (頭を押しても当たる)。
+    // The floating NEW label can sit outside the head/foot hit segment, especially
+    // when zoomed in. Treat its actual projected rectangle as part of the pin.
+    for (const id of [...pinOrder].reverse()) {
+      const meta = pinMeta.get(id);
+      const badge = meta?.badge;
+      if (!meta?.arrived || !badge?.group.visible || !badge.label.visible) continue;
+      if (!projectPin(id)?.visible) continue;
+      const center = badge.label.getWorldPosition(new Vector3());
+      const size = badge.label.getWorldScale(new Vector3());
+      const topLeft = toScreen(center.clone().add(new Vector3(-size.x / 2, size.y / 2, 0)));
+      const bottomRight = toScreen(center.clone().add(new Vector3(size.x / 2, -size.y / 2, 0)));
+      const padding = 6;
+      if (
+        px >= topLeft.x - padding &&
+        px <= bottomRight.x + padding &&
+        py >= topLeft.y - padding &&
+        py <= bottomRight.y + padding
+      )
+        return id;
+    }
+    // 実際の足元〜アニメーション中の頭を結ぶ線分で判定する。
     const candidates = pinOrder
       .map((id) => {
         const projected = projectPin(id);
         const pin = rig.getPin(id);
         if (!projected || !pin) return null;
         const tip = pin.object.getWorldPosition(new Vector3());
-        const head = tip.clone().add(tip.clone().normalize().multiplyScalar(PIN_HEIGHT));
-        const headScreen = toScreen(head);
+        const footScreen = toScreen(tip);
         const nearest = closestPointOnSegment(
           projected.x,
           projected.y,
-          headScreen.x,
-          headScreen.y,
+          footScreen.x,
+          footScreen.y,
           px,
           py,
         );
@@ -533,6 +746,7 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
         rotateBy: (spin, tilt) => rig.rotateBy(spin, tilt),
         pickPinAt,
         onPinPicked: (id) => {
+          dismissPinNew(id);
           idleResume?.touch();
           setAutoRotate(false);
           for (const cb of pinPickedCallbacks) cb(id);
@@ -552,6 +766,10 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     unbindInteraction?.();
     idleResume?.dispose();
     clear();
+    gophers.dispose();
+    rens.dispose();
+    newBadges.dispose();
+    messageGlobe?.dispose();
     sphereGeometry.dispose();
     sphereMaterial.map?.dispose();
     sphereMaterial.dispose();
@@ -566,6 +784,8 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
   };
 
   return {
+    setMessageMode,
+    setNewBadgeCallout,
     addPin,
     removePin,
     clear,

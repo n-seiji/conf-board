@@ -54,6 +54,35 @@ const palette = {
 };
 
 describe("drawWorld", () => {
+  it("can retain polar land and omit coastline thickening for the detailed globe", () => {
+    const ctx = createMockContext();
+    drawWorld(ctx, palette, {
+      landPolygons: [
+        [
+          [
+            [-20, -80],
+            [20, -80],
+            [20, -70],
+            [-20, -70],
+          ],
+        ],
+      ],
+      borderSegments: [],
+      width: 360,
+      height: 180,
+      minPolygonArea: 0,
+      roundStrokeWidth: 0,
+      simplifyToleranceDeg: 0,
+      smoothIterations: 0,
+      southClipLat: -90,
+      northClipLat: 90,
+    });
+    const filled = ctx.calls.indexOf("fill(evenodd)");
+    expect(filled).toBeGreaterThan(0);
+    expect(ctx.calls[filled + 1]).not.toBe("stroke");
+    expect(ctx.calls).toContain("moveTo(160,170)");
+  });
+
   it("海の fillRect を最初に描く", () => {
     const ctx = createMockContext();
     const data: WorldTextureData = {

@@ -12,6 +12,8 @@
     ".wrangler",
     "node_modules",
     "pnpm-lock.yaml",
-    ".playwright-mcp"
+    ".playwright-mcp",
+    "assets/**/viewer*.html",
+    "assets/kurita-miive"
   ]
 }

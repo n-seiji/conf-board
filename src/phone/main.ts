@@ -166,7 +166,6 @@ const renderForm = (errorMessage?: string): HTMLElement => {
     <img class="phone-gopher" src="/gopher-surf.png" alt="" />
     <div class="phone-footer">
       <p>miive</p>
-      <p>The Go gopher was designed by Renee French.</p>
     </div>
   `;
 

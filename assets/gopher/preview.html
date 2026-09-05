@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gopher — motion & color studio</title>
+    <link rel="icon" href="data:," />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #f4f2ec;
+        color: #243838;
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+      }
+      main {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        min-height: 100vh;
+      }
+      #stage {
+        position: relative;
+        min-height: 600px;
+        height: 100vh;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      header {
+        position: absolute;
+        left: 42px;
+        top: 34px;
+        pointer-events: none;
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #627873;
+      }
+      h1 {
+        font-size: 42px;
+        letter-spacing: -2px;
+        font-weight: 600;
+        margin: 8px 0;
+      }
+      header p {
+        font-size: 13px;
+        color: #6a7d77;
+      }
+      .hint {
+        position: absolute;
+        bottom: 28px;
+        left: 42px;
+        font-size: 12px;
+        color: #748680;
+      }
+      aside {
+        padding: 40px 28px;
+        border-left: 1px solid #d9dfd8;
+        background: #fafbf7;
+        display: flex;
+        flex-direction: column;
+        gap: 30px;
+      }
+      .section-label {
+        font-size: 10px;
+        letter-spacing: 2px;
+        color: #85938d;
+        margin-bottom: 14px;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+        background: transparent;
+        border: 1px solid #d5ded5;
+        border-radius: 12px;
+        padding: 12px 16px;
+        text-align: left;
+      }
+      button:hover {
+        background: #edf2e9;
+      }
+      button.active {
+        background: #24483e;
+        color: white;
+        border-color: #24483e;
+      }
+      .clips {
+        display: grid;
+        gap: 8px;
+      }
+      .clips button {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .clips small {
+        font-size: 11px;
+        opacity: 0.6;
+      }
+      .swatches {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      .swatches button {
+        border: 3px solid white;
+        padding: 0;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        box-shadow: 0 0 0 1px #d4ded5;
+      }
+      .color-field {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: white;
+        border: 1px solid #dce2db;
+        border-radius: 10px;
+        padding: 8px 12px;
+      }
+      input[type="color"] {
+        width: 30px;
+        height: 28px;
+        padding: 0;
+        border: 0;
+        background: none;
+        cursor: pointer;
+      }
+      output {
+        font: 12px monospace;
+      }
+      input[type="range"] {
+        width: 100%;
+        accent-color: #24483e;
+      }
+      .views {
+        display: flex;
+        gap: 8px;
+      }
+      .views button {
+        flex: 1;
+        text-align: center;
+        font-size: 12px;
+        padding: 10px;
+      }
+      .info {
+        font-size: 12px;
+        line-height: 1.8;
+        color: #7a8880;
+      }
+      .downloads {
+        margin-top: auto;
+        display: grid;
+        gap: 10px;
+      }
+      a {
+        color: #355e50;
+        font-size: 12px;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      #status {
+        font-size: 11px;
+        color: #637a6e;
+      }
+      .pause {
+        width: 100%;
+        text-align: center;
+      }
+      #error {
+        position: absolute;
+        top: 50%;
+        left: 10%;
+        right: 10%;
+        background: #fff1ed;
+        border-radius: 12px;
+        padding: 20px;
+        color: #ab4131;
+        display: none;
+      }
+      @media (max-width: 800px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+        #stage {
+          height: 65vh;
+          min-height: 460px;
+        }
+        aside {
+          border-left: 0;
+          border-top: 1px solid #d9dfd8;
+          padding: 24px;
+          gap: 20px;
+        }
+        header {
+          left: 24px;
+          top: 20px;
+        }
+        h1 {
+          font-size: 30px;
+        }
+        .hint {
+          left: 24px;
+        }
+        .downloads {
+          margin-top: 0;
+        }
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/node_modules/three/build/three.module.js",
+          "three/addons/": "/node_modules/three/examples/jsm/"
+        }
+      }
+    </script>
+    <script src="/node_modules/topojson-client/dist/topojson-client.min.js"></script>
+  </head>
+  <body>
+    <main>
+      <div id="stage">
+        <header>
+          <div class="eyebrow">Character study · 01</div>
+          <h1>Hello, Gopher.</h1>
+          <p>小さな動きで、世界とつながる。</p>
+        </header>
+        <div class="hint">ドラッグで回転 · スクロールでズーム</div>
+        <div id="error" role="alert"></div>
+      </div>
+      <aside>
+        <div>
+          <div class="section-label">01 / MOTION</div>
+          <div class="clips">
+            <button data-clip="Dance" class="active">Dance <small>3.2s · LOOP</small></button>
+            <button data-clip="Wave">Wave <small>3.0s · LOOP</small></button>
+            <button data-clip="Hop">Hop <small>2.4s · LOOP</small></button>
+          </div>
+        </div>
+        <div>
+          <div class="section-label">02 / EXPRESSION</div>
+          <div class="views">
+            <button data-expression="Neutral" class="active">通常</button>
+            <button data-expression="Smile">笑顔</button>
+            <button data-expression="Wink">ウィンク</button>
+            <button data-expression="Surprised">びっくり</button>
+          </div>
+        </div>
+        <div>
+          <div class="section-label">03 / BODY COLOR</div>
+          <div class="swatches">
+            <button data-color="#1baec7" style="background: #1baec7" aria-label="Cyan"></button>
+            <button data-color="#ed98aa" style="background: #ed98aa" aria-label="Rose"></button>
+            <button data-color="#a8bc83" style="background: #a8bc83" aria-label="Sage"></button>
+            <button data-color="#b09ddd" style="background: #b09ddd" aria-label="Lilac"></button>
+            <button data-color="#e9bb69" style="background: #e9bb69" aria-label="Honey"></button>
+          </div>
+          <label class="color-field"
+            ><input id="color" type="color" value="#1baec7" aria-label="Body color" /><output
+              id="hex"
+              >#1BAEC7</output
+            ></label
+          >
+        </div>
+        <div>
+          <div class="section-label">04 / SCENE</div>
+          <div class="views">
+            <button id="studio" class="active">Studio</button><button id="globe">On Earth</button>
+          </div>
+        </div>
+        <div>
+          <div class="section-label">PLAYBACK · <span id="speed-label">1.0×</span></div>
+          <input
+            id="speed"
+            aria-label="Playback speed"
+            type="range"
+            min="0.25"
+            max="2"
+            value="1"
+            step="0.25"
+          /><button class="pause" id="pause">Pause</button>
+        </div>
+        <div class="downloads">
+          <div id="status">モデルを読み込み中…</div>
+          <a href="../../public/models/gopher.glb" download>↓ Animated GLB</a
+          ><a href="gopher.blend" download>↓ Blender source</a>
+          <div class="info">3 motions · 4 expressions · 6 bones<br />Shared BodyColor material</div>
+        </div>
+      </aside>
+    </main>
+    <link rel="stylesheet" href="/src/styles/gopher-credit.css" />
+    <small class="gopher-credit">The Go gopher was designed by Renee French.</small>
+    <script type="module" src="./preview.js"></script>
+  </body>
+</html>
