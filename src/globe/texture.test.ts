@@ -1,16 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadLandPolygons } from "./land-data";
-import {
-  type DrawContext,
-  type WorldTextureData,
-  type Ring,
-  buildBorderSegments,
-  drawWorld,
-  excludePolygonsSouthOf,
-  simplifyRing,
-  smoothPolyline,
-  smoothRing,
-} from "./texture";
+import { type DrawContext, type WorldTextureData, drawWorld } from "./texture";
 
 const createMockContext = (): DrawContext & { calls: string[] } => {
   const calls: string[] = [];
@@ -19,9 +9,6 @@ const createMockContext = (): DrawContext & { calls: string[] } => {
     fillStyle: "",
     strokeStyle: "",
     lineWidth: 0,
-    lineJoin: "round",
-    lineCap: "round",
-    globalAlpha: 1,
     fillRect(x, y, w, h) {
       calls.push(`fillRect(${x},${y},${w},${h})`);
     },
@@ -49,45 +36,14 @@ const createMockContext = (): DrawContext & { calls: string[] } => {
 const palette = {
   ocean: "#7fd9cc",
   land: "#3fb3a3",
-  border: "rgba(255,255,255,0.45)",
   graticule: "rgba(255,255,255,0.12)",
 };
 
 describe("drawWorld", () => {
-  it("can retain polar land and omit coastline thickening for the detailed globe", () => {
-    const ctx = createMockContext();
-    drawWorld(ctx, palette, {
-      landPolygons: [
-        [
-          [
-            [-20, -80],
-            [20, -80],
-            [20, -70],
-            [-20, -70],
-          ],
-        ],
-      ],
-      borderSegments: [],
-      width: 360,
-      height: 180,
-      minPolygonArea: 0,
-      roundStrokeWidth: 0,
-      simplifyToleranceDeg: 0,
-      smoothIterations: 0,
-      southClipLat: -90,
-      northClipLat: 90,
-    });
-    const filled = ctx.calls.indexOf("fill(evenodd)");
-    expect(filled).toBeGreaterThan(0);
-    expect(ctx.calls[filled + 1]).not.toBe("stroke");
-    expect(ctx.calls).toContain("moveTo(160,170)");
-  });
-
   it("海の fillRect を最初に描く", () => {
     const ctx = createMockContext();
     const data: WorldTextureData = {
       landPolygons: [],
-      borderSegments: [],
       width: 100,
       height: 50,
     };
@@ -95,30 +51,9 @@ describe("drawWorld", () => {
     expect(ctx.calls[0]).toBe("fillRect(0,0,100,50)");
   });
 
-  it("小さすぎるポリゴン (小島) は描画から除外する", () => {
+  it("陸ポリゴンは fill(evenodd) される", () => {
     const ctx = createMockContext();
-    const tinyIsland: WorldTextureData["landPolygons"][number] = [
-      [
-        [0, 0],
-        [0.01, 0],
-        [0.01, 0.01],
-        [0, 0.01],
-      ],
-    ];
-    const data: WorldTextureData = {
-      landPolygons: [tinyIsland],
-      borderSegments: [],
-      width: 100,
-      height: 50,
-      minPolygonArea: 0.6,
-    };
-    drawWorld(ctx, palette, data);
-    expect(ctx.calls.some((c) => c === "fill")).toBe(false);
-  });
-
-  it("十分に大きいポリゴンは fill/stroke される", () => {
-    const ctx = createMockContext();
-    const bigLand: WorldTextureData["landPolygons"][number] = [
+    const land: WorldTextureData["landPolygons"][number] = [
       [
         [-10, -10],
         [10, -10],
@@ -127,32 +62,12 @@ describe("drawWorld", () => {
       ],
     ];
     const data: WorldTextureData = {
-      landPolygons: [bigLand],
-      borderSegments: [],
+      landPolygons: [land],
       width: 100,
       height: 50,
-      minPolygonArea: 0.6,
     };
     drawWorld(ctx, palette, data);
     expect(ctx.calls.includes("fill(evenodd)")).toBe(true);
-    expect(ctx.calls.includes("stroke")).toBe(true);
-  });
-
-  it("borderSegments を線として描画する", () => {
-    const ctx = createMockContext();
-    const data: WorldTextureData = {
-      landPolygons: [],
-      borderSegments: [
-        [
-          [0, 0],
-          [10, 10],
-        ],
-      ],
-      width: 100,
-      height: 50,
-    };
-    drawWorld(ctx, palette, data);
-    expect(ctx.calls.filter((c) => c.startsWith("moveTo")).length).toBeGreaterThan(0);
   });
 
   it("antimeridian (経度180度) をまたぐリングは lineTo でつながず、幅の90%以上ジャンプする線を描かない", () => {
@@ -168,15 +83,13 @@ describe("drawWorld", () => {
     ];
     const data: WorldTextureData = {
       landPolygons: [crossingRing],
-      borderSegments: [],
       width: 1000,
       height: 500,
-      minPolygonArea: 0,
     };
     drawWorld(ctx, palette, data);
 
-    // 陸ポリゴンのトレースに関する呼び出しだけを見る (経緯線・国境は意図的に画面幅いっぱいに線を引くため除外)。
-    const landSectionEnd = ctx.calls.indexOf("stroke");
+    // 陸ポリゴンのトレースに関する呼び出しだけを見る (経緯線は意図的に画面幅いっぱいに線を引くため除外)。
+    const landSectionEnd = ctx.calls.indexOf("fill(evenodd)");
     const landCalls = ctx.calls.slice(0, landSectionEnd + 1);
 
     let prevX: number | null = null;
@@ -198,6 +111,32 @@ describe("drawWorld", () => {
     expect(lineToCount).toBeGreaterThan(0);
   });
 
+  it("antimeridian をまたぐリングは最初のジャンプ直後の点から描き始める", () => {
+    const ctx = createMockContext();
+    // 170 → -170 でジャンプするリング。ジャンプ直後の点は [-170, 10]。
+    const crossingRing: WorldTextureData["landPolygons"][number] = [
+      [
+        [170, 10],
+        [-170, 10],
+        [-170, -10],
+        [170, -10],
+      ],
+    ];
+    const data: WorldTextureData = {
+      landPolygons: [crossingRing],
+      width: 1000,
+      height: 500,
+    };
+    drawWorld(ctx, palette, data);
+
+    const firstMoveTo = ctx.calls.find((c) => c.startsWith("moveTo"));
+    const [expectedX, expectedY] = [
+      ((-170 + 180) / 360) * data.width,
+      ((90 - 10) / 180) * data.height,
+    ];
+    expect(firstMoveTo).toBe(`moveTo(${expectedX},${expectedY})`);
+  });
+
   it("穴を持つポリゴンの場合、外周と穴を1つのパスとして beginPath は1回だけ呼ばれる", () => {
     const ctx = createMockContext();
     const outerFirstPoint: readonly [number, number] = [-10, -10];
@@ -216,12 +155,8 @@ describe("drawWorld", () => {
     const polygonWithHole: WorldTextureData["landPolygons"][number] = [outer, hole];
     const data: WorldTextureData = {
       landPolygons: [polygonWithHole],
-      borderSegments: [],
       width: 100,
       height: 50,
-      minPolygonArea: 0,
-      // このテストは beginPath の呼ばれ方を検証するものなので、平滑化による座標のズレを避ける。
-      smoothIterations: 0,
     };
     drawWorld(ctx, palette, data);
 
@@ -243,221 +178,11 @@ describe("drawWorld", () => {
   });
 });
 
-describe("buildBorderSegments", () => {
-  it("隣接セルの国が異なる境界のみ線分を作る", () => {
-    const cells = {
-      lat0: 0,
-      lon0: 0,
-      step: 2,
-      rows: 1,
-      cols: 2,
-      countryByCell: [0, 1],
-    };
-    const segments = buildBorderSegments(cells);
-    expect(segments.length).toBe(1);
-  });
-
-  it("同じ国どうしの隣接セルには線分を作らない", () => {
-    const cells = {
-      lat0: 0,
-      lon0: 0,
-      step: 2,
-      rows: 1,
-      cols: 2,
-      countryByCell: [0, 0],
-    };
-    const segments = buildBorderSegments(cells);
-    expect(segments.length).toBe(0);
-  });
-
-  it("陸でないセル (-1) は境界を作らない", () => {
-    const cells = {
-      lat0: 0,
-      lon0: 0,
-      step: 2,
-      rows: 1,
-      cols: 2,
-      countryByCell: [0, -1],
-    };
-    const segments = buildBorderSegments(cells);
-    expect(segments.length).toBe(0);
-  });
-
-  it("L字型の境界は平滑化されて角が増える (階段状にならない)", () => {
-    // 2x2 で country 0 が (0,0),(0,1) を占め、country 1 が (1,1) だけを占める L 字境界。
-    const cells = {
-      lat0: 0,
-      lon0: 0,
-      step: 2,
-      rows: 2,
-      cols: 2,
-      countryByCell: [0, 0, 0, 1],
-    };
-    const segments = buildBorderSegments(cells);
-    // 平滑化により直角の折れ線 (2 セグメント) より多くのセグメントに分割される。
-    expect(segments.length).toBeGreaterThan(2);
-  });
-
-  it("海を挟んだ2つの離れた陸地 (異なる国) の間には境界線分を作らない", () => {
-    // 1行×5列: [国0の陸, 海, 海, 国1の陸, 海]。0番と3番の間は隣接していないので繋がない。
-    const cells = {
-      lat0: 0,
-      lon0: 0,
-      step: 2,
-      rows: 1,
-      cols: 5,
-      countryByCell: [0, -1, -1, 1, -1],
-    };
-    const segments = buildBorderSegments(cells);
-    expect(segments.length).toBe(0);
-  });
-
-  it("両側とも陸だが同じ国のセルが海を挟んでいても、隣接しないセル間には線分を作らない", () => {
-    // 1行×3列: [国0, 海, 国0] のように同じ国が海を挟んで離れていても、隣接判定は行わない。
-    const cells = {
-      lat0: 0,
-      lon0: 0,
-      step: 2,
-      rows: 1,
-      cols: 3,
-      countryByCell: [0, -1, 0],
-    };
-    const segments = buildBorderSegments(cells);
-    expect(segments.length).toBe(0);
-  });
-});
-
-describe("excludePolygonsSouthOf", () => {
-  it("全体が南極域 (南緯60度以南) にあるポリゴンを除外する", () => {
-    const antarctica: WorldTextureData["landPolygons"][number] = [
-      [
-        [-170, -85],
-        [170, -85],
-        [170, -65],
-        [-170, -65],
-      ],
-    ];
-    const result = excludePolygonsSouthOf([antarctica]);
-    expect(result.length).toBe(0);
-  });
-
-  it("南緯60度より北にまたがるポリゴンは残す", () => {
-    const southAmerica: WorldTextureData["landPolygons"][number] = [
-      [
-        [-70, -55],
-        [-50, -55],
-        [-50, 0],
-        [-70, 0],
-      ],
-    ];
-    const result = excludePolygonsSouthOf([southAmerica]);
-    expect(result.length).toBe(1);
-  });
-});
-
-describe("smoothPolyline", () => {
-  it("端点を保持したまま点数を増やす (Chaikin 法)", () => {
-    const points: readonly [number, number][] = [
-      [0, 0],
-      [10, 0],
-      [10, 10],
-    ];
-    const smoothed = smoothPolyline(points, 2);
-    expect(smoothed[0]).toEqual(points[0]);
-    expect(smoothed[smoothed.length - 1]).toEqual(points[points.length - 1]);
-    expect(smoothed.length).toBeGreaterThan(points.length);
-  });
-
-  it("2点以下の折れ線はそのまま返す", () => {
-    const points: readonly [number, number][] = [
-      [0, 0],
-      [10, 0],
-    ];
-    expect(smoothPolyline(points, 2)).toEqual(points);
-  });
-});
-
-describe("simplifyRing", () => {
-  it("小さな出っ張りを持つ正方形の場合、許容誤差1度で4点に単純化される", () => {
-    const ring: Ring = [
-      [0, 0],
-      [5, 0],
-      [5, 0.1], // わずかな出っ張り (誤差0.1度)
-      [10, 0],
-      [10, 10],
-      [0, 10],
-    ];
-    const simplified = simplifyRing(ring, 1);
-    expect(simplified.length).toBe(4);
-  });
-
-  it("点数が5未満のリングの場合、そのまま変更せず返す", () => {
-    const ring: Ring = [
-      [0, 0],
-      [10, 0],
-      [10, 10],
-      [0, 10],
-    ];
-    expect(simplifyRing(ring, 1)).toEqual(ring);
-  });
-});
-
-describe("smoothRing", () => {
-  it("正方形の場合、点数が増え、すべての点が元の外接矩形内に収まる", () => {
-    const ring: Ring = [
-      [0, 0],
-      [10, 0],
-      [10, 10],
-      [0, 10],
-    ];
-    const smoothed = smoothRing(ring, 2);
-    expect(smoothed.length).toBeGreaterThan(ring.length);
-    for (const [lon, lat] of smoothed) {
-      expect(lon).toBeGreaterThanOrEqual(0);
-      expect(lon).toBeLessThanOrEqual(10);
-      expect(lat).toBeGreaterThanOrEqual(0);
-      expect(lat).toBeLessThanOrEqual(10);
-    }
-  });
-
-  it("正方形の場合、角が丸められ元の頂点座標がそのまま残らない", () => {
-    const ring: Ring = [
-      [0, 0],
-      [10, 0],
-      [10, 10],
-      [0, 10],
-    ];
-    const smoothed = smoothRing(ring, 2);
-    for (const corner of ring) {
-      expect(smoothed.some((p) => p[0] === corner[0] && p[1] === corner[1])).toBe(false);
-    }
-  });
-
-  it("antimeridianをまたぐリングの場合、地図を横断する隣接点を作らない", () => {
-    const ring: Ring = [
-      [170, 10],
-      [-170, 10],
-      [-170, -10],
-      [170, -10],
-    ];
-    const smoothed = smoothRing(ring, 2);
-    for (let i = 0; i < smoothed.length; i++) {
-      const curr = smoothed[i];
-      const next = smoothed[(i + 1) % smoothed.length];
-      if (!curr || !next) continue;
-      const diff = Math.abs(next[0] - curr[0]);
-      // 隣接点はほぼ近接 (30度以内) しているか、antimeridianの大きなジャンプ (180度超) のどちらか。
-      expect(diff <= 30 || diff > 180).toBe(true);
-    }
-  });
-});
-
 describe("drawWorld (実データ)", () => {
   it("実データ (land-110m) で穴を持つアフロユーラシア大陸の外周 (喜望峰付近) が描画される", () => {
     const ctx = createMockContext();
     const data: WorldTextureData = {
       landPolygons: loadLandPolygons(),
-      borderSegments: [],
       width: 2048,
       height: 1024,
     };
@@ -481,9 +206,7 @@ describe("drawWorld (実データ)", () => {
         if (!match) continue;
         const x = Number(match[1]);
         const y = Number(match[2]);
-        // 平滑化 (simplifyRing + smoothRing) で喜望峰の頂点が僅かに移動するため、
-        // 従来の 10px から 30px まで許容範囲を広げる。
-        if (Math.abs(x - capOfGoodHope.x) <= 30 && Math.abs(y - capOfGoodHope.y) <= 30) {
+        if (Math.abs(x - capOfGoodHope.x) <= 10 && Math.abs(y - capOfGoodHope.y) <= 10) {
           found = true;
         }
       }

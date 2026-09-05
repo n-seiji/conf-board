@@ -10,6 +10,8 @@ export type LandPolygon = readonly LandRing[];
  * world-atlas の land-110m (TopoJSON) から陸ポリゴン群を取り出す。
  * ブラウザ側 (`world-texture.ts`) とビルド時スクリプト (`scripts/gen-regions.ts`)、
  * テスト (`regions.test.ts`) のいずれからも同じロジックで読み込むための共通化。
+ * `topojson-specification` (topojson-client の型が依存する型パッケージ) が
+ * 直接の依存として解決できないため、Topology 型を厳密に付けられず `any` を使う。
  */
 export const loadLandPolygons = (): readonly LandPolygon[] => {
   // oxlint-disable-next-line typescript/no-explicit-any -- world-atlas / topojson-client には型定義が無い。

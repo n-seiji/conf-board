@@ -1,13 +1,9 @@
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadLandPolygons } from "../src/globe/land-data";
-import {
-  type MultiPolygonCoords,
-  buildLandTester,
-  generateRegions,
-} from "../src/globe/regions-gen";
+import { buildLandTester, generateRegions } from "../src/globe/regions-gen";
 
-const isLand = buildLandTester(loadLandPolygons() as MultiPolygonCoords);
+const isLand = buildLandTester(loadLandPolygons());
 const regions = generateRegions(isLand);
 
 const outPath = resolve(import.meta.dirname, "../src/globe/regions.json");

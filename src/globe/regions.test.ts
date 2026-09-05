@@ -1,20 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { loadLandPolygons } from "./land-data";
+import { type LandPolygon, loadLandPolygons } from "./land-data";
 import {
   CANDIDATE_MAX_LAT,
   CANDIDATE_MIN_LAT,
-  type MultiPolygonCoords,
   buildLandTester,
   filterCandidateEligible,
   generateRegions,
 } from "./regions-gen";
 import regions from "./regions.json";
 
-/** land-110m から実際の陸ポリゴン (MultiPolygonCoords 相当) を取り出す。読み込みは land-data.ts に共通化。 */
-const loadRealLandPolygons = (): MultiPolygonCoords => loadLandPolygons() as MultiPolygonCoords;
-
 /** 単純な正方形の陸地 (赤道付近) を持つテスト用ポリゴン。 */
-const SQUARE_LAND: MultiPolygonCoords = [
+const SQUARE_LAND: readonly LandPolygon[] = [
   [
     [
       [-20, -20],
@@ -35,7 +31,7 @@ describe("buildLandTester", () => {
 
   it("antimeridian (経度180度) をまたぐリングでも、ポリゴンの外の点を陸と誤判定しない", () => {
     // 170 → -170 とワープするリング (ロシア/フィジー等を模した陸地)。
-    const crossingLand: MultiPolygonCoords = [
+    const crossingLand: readonly LandPolygon[] = [
       [
         [
           [170, 10],
@@ -56,7 +52,7 @@ describe("buildLandTester", () => {
   });
 
   it("実データ (land-110m) で太平洋・南大西洋・インド洋の中心が陸と判定されない", () => {
-    const isLand = buildLandTester(loadRealLandPolygons());
+    const isLand = buildLandTester(loadLandPolygons());
     // 太平洋中央 (lat 0, lon -150)
     expect(isLand(-150, 0)).toBe(false);
     // 南大西洋 (lat -30, lon -20)
@@ -66,7 +62,7 @@ describe("buildLandTester", () => {
   });
 
   it("実データ (land-110m) で東京・シドニーおよびロシア・フィジー付近の陸地は正しく陸と判定される", () => {
-    const isLand = buildLandTester(loadRealLandPolygons());
+    const isLand = buildLandTester(loadLandPolygons());
     expect(isLand(139.7, 35.7)).toBe(true); // 東京
     expect(isLand(151.2, -33.9)).toBe(true); // シドニー
     expect(isLand(100, 60)).toBe(true); // ロシア本土
@@ -165,7 +161,7 @@ describe("regions.json (コミット済み生成結果)", () => {
   });
 
   it("各国の候補着地点はすべて実データ上の陸セル中心である (海上ピンが刺さらない)", () => {
-    const isLand = buildLandTester(loadRealLandPolygons());
+    const isLand = buildLandTester(loadLandPolygons());
     for (const country of regions.countries) {
       for (const candidate of country.candidates) {
         const [lat, lon] = candidate;

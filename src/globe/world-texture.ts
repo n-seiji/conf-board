@@ -15,15 +15,8 @@ export const createWorldTexture = (): CanvasTexture => {
 
   const data: WorldTextureData = {
     landPolygons: loadLandPolygons(),
-    borderSegments: [],
     width: TEXTURE_WIDTH,
     height: TEXTURE_HEIGHT,
-    minPolygonArea: 0,
-    roundStrokeWidth: 0,
-    simplifyToleranceDeg: 0,
-    smoothIterations: 0,
-    southClipLat: -90,
-    northClipLat: 90,
   };
 
   drawWorld(
@@ -31,7 +24,6 @@ export const createWorldTexture = (): CanvasTexture => {
     {
       ocean: "#568c9d",
       land: "#c9d5ad",
-      border: "transparent",
       graticule: "rgba(210,235,240,0.18)",
     },
     data,

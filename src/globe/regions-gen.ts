@@ -3,11 +3,9 @@
  * ビルド時に scripts/gen-regions.ts から呼ばれる。ブラウザでは実行しない。
  */
 
-export type LonLat = readonly [lon: number, lat: number];
-export type LatLon = readonly [lat: number, lon: number];
+import type { LandPolygon, LandRing } from "./land-data";
 
-/** GeoJSON MultiPolygon の座標 (穴を含む)。 */
-export type MultiPolygonCoords = readonly (readonly (readonly LonLat[])[])[];
+export type LatLon = readonly [lat: number, lon: number];
 
 export type RegionsData = Readonly<{
   version: 1;
@@ -34,7 +32,7 @@ export const CANDIDATE_MIN_LAT = -50;
 export const CANDIDATE_MAX_LAT = 65;
 
 /** mulberry32: 固定シードの決定的 PRNG。 */
-export const mulberry32 = (seed: number): (() => number) => {
+const mulberry32 = (seed: number): (() => number) => {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -46,7 +44,7 @@ export const mulberry32 = (seed: number): (() => number) => {
 };
 
 const boundsOf = (
-  ring: readonly LonLat[],
+  ring: LandRing,
 ): Readonly<{
   minLon: number;
   maxLon: number;
@@ -67,7 +65,7 @@ const boundsOf = (
 };
 
 /** レイキャスト法によるリング内外判定。 */
-const pointInRing = (lon: number, lat: number, ring: readonly LonLat[]): boolean => {
+const pointInRing = (lon: number, lat: number, ring: LandRing): boolean => {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     const pi = ring[i];
@@ -82,11 +80,7 @@ const pointInRing = (lon: number, lat: number, ring: readonly LonLat[]): boolean
 };
 
 /** 穴 (2 番目以降のリング) を考慮したポリゴン内外判定。 */
-const pointInPolygon = (
-  lon: number,
-  lat: number,
-  polygon: readonly (readonly LonLat[])[],
-): boolean => {
+const pointInPolygon = (lon: number, lat: number, polygon: LandPolygon): boolean => {
   const outer = polygon[0];
   if (!outer || !pointInRing(lon, lat, outer)) return false;
   for (let i = 1; i < polygon.length; i++) {
@@ -102,9 +96,9 @@ const pointInPolygon = (
  * そのまま ray casting すると、-180→180 の "ワープする辺" が地図全幅を覆う巨大な偽の辺に
  * なり、太平洋の真ん中まで陸と誤判定してしまうため、判定前に必ず連続化しておく。
  */
-const unwrapRingLongitude = (ring: readonly LonLat[]): readonly LonLat[] => {
+const unwrapRingLongitude = (ring: LandRing): LandRing => {
   if (ring.length === 0) return ring;
-  const result: LonLat[] = [];
+  const result: [number, number][] = [];
   let offset = 0;
   let prevAdjusted: number | null = null;
   for (const [lon, lat] of ring) {
@@ -132,7 +126,7 @@ const unwrapRingLongitude = (ring: readonly LonLat[]): readonly LonLat[] => {
  * クエリ点は unwrap 後の座標系に合わせて (lon, lon+360, lon-360) の 3 通りを試す。
  */
 export const buildLandTester = (
-  multiPolygon: MultiPolygonCoords,
+  multiPolygon: readonly LandPolygon[],
 ): ((lon: number, lat: number) => boolean) => {
   const polygons = multiPolygon.map((polygon) => {
     const unwrapped = polygon.map(unwrapRingLongitude);
@@ -150,7 +144,7 @@ export const buildLandTester = (
   };
 };
 
-export type LandGrid = Readonly<{
+type LandGrid = Readonly<{
   lat0: number;
   lon0: number;
   step: number;
@@ -161,10 +155,7 @@ export type LandGrid = Readonly<{
 }>;
 
 /** 2° 格子で陸のサンプル点を作る (南極 lat < -60 は除外)。 */
-export const buildLandGrid = (
-  isLand: (lon: number, lat: number) => boolean,
-  step = 2,
-): LandGrid => {
+const buildLandGrid = (isLand: (lon: number, lat: number) => boolean, step = 2): LandGrid => {
   const lat0 = MIN_LAT;
   const lon0 = -180;
   const rows = Math.floor((MAX_LAT - MIN_LAT) / step) + 1;
@@ -204,7 +195,7 @@ const normalize = (v: Vec3): Vec3 => {
   return [v[0] / len, v[1] / len, v[2] / len];
 };
 
-export type KMeansResult = Readonly<{
+type KMeansResult = Readonly<{
   /** 各サンプル点が属するクラスタ id。 */
   assignment: readonly number[];
   centroids: readonly LatLon[];
@@ -214,7 +205,7 @@ export type KMeansResult = Readonly<{
  * 球面 k-means。コサイン類似度 (単位ベクトルの内積) を距離指標に使う。
  * 固定シードの PRNG で初期クラスタを選ぶため決定的。
  */
-export const sphericalKMeans = (
+const sphericalKMeans = (
   points: readonly LatLon[],
   k: number,
   seed: number,
