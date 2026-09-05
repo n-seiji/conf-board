@@ -1,22 +1,22 @@
-export type NewGopherState = {
+export type NewBadgeState = {
   phase: "pending" | "new" | "done";
   remaining: number;
 };
 
-export const newGopherState = (): NewGopherState => ({
+export const createNewBadgeState = (): NewBadgeState => ({
   phase: "pending",
   remaining: Math.PI * 2,
 });
 
 /** Both renderers share the same lifetime; moving a label never extends it. */
 export const newBadgePlacement = (
-  state: NewGopherState | null,
+  state: NewBadgeState | null,
   calloutVisible: boolean,
 ): "head" | "callout" | "none" =>
   state?.phase === "new" ? (calloutVisible ? "callout" : "head") : "none";
 
 /** Returns true exactly once on the first update after the model is ready. */
-export const advanceNewGopher = (state: NewGopherState, autoRotation: number): boolean => {
+export const advanceNewBadge = (state: NewBadgeState, autoRotation: number): boolean => {
   if (state.phase === "pending") {
     state.phase = "new";
     return true;
@@ -29,7 +29,7 @@ export const advanceNewGopher = (state: NewGopherState, autoRotation: number): b
 };
 
 /** Selection acknowledges the post; NEW must not return after its callout closes. */
-export const dismissNewGopher = (state: NewGopherState): void => {
+export const dismissNewBadge = (state: NewBadgeState): void => {
   state.phase = "done";
   state.remaining = 0;
 };

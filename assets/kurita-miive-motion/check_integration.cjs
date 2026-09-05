@@ -178,7 +178,7 @@ module.exports = async (page) => {
     window.picked = null;
     window.gopherLanded = false;
     window.globe.addPin({ ...window.renPost, seq: 149 }, { animate: true });
-    window.globe.focusPin("ren-front", 0, () => (window.gopherLanded = true));
+    window.globe.onPinArrived("ren-front", () => (window.gopherLanded = true));
   });
   await page.waitForFunction(() => window.gopherLanded);
   const gp = await page.evaluate(() => window.globe.projectPin("ren-front"));

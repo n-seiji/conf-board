@@ -169,8 +169,8 @@ const main = (): void => {
    * 回転完了後にそのピンだけの吹き出しを強調表示 (`callouts.addCallout`、トースト・音は鳴らさない) →
    * (`centerPin` 内で `idleResume` を touch するため) そこから 5 秒操作が無ければ自転再開 →
    * 自転再開 (`onAutoRotateChange(true)`) を合図にアンビエントな自動補充を再開する。
-   * 到着演出の `focusPin` と違い、着地アニメーション・波紋は再生しない。なお、ソロ表示中に
-   * 新規投稿が到着した場合は `focusPin` → `addCallout` がそのまま動くため、到着の吹き出しは
+   * 到着演出の `onPinArrived` と違い、着地アニメーション・波紋は再生しない。なお、ソロ表示中に
+   * 新規投稿が到着した場合は `onPinArrived` → `addCallout` がそのまま動くため、到着の吹き出しは
    * 通常どおり表示される (ソロ状態と競合しない)。
    */
   const postsById = new Map<string, Post>();
@@ -179,7 +179,7 @@ const main = (): void => {
     if (!post) return;
     callouts.setAmbientEnabled(false);
     callouts.closeAllExcept(id);
-    globe.centerPin(id, 700, () => {
+    globe.centerPin(id, () => {
       callouts.addCallout(post);
     });
   });
@@ -302,7 +302,7 @@ const main = (): void => {
       postsById.set(post.id, post);
       callouts.trackPost(post);
       // 自転を邪魔せず、裏側から新しいGopherが登場した時に吹き出し・音を出す。
-      globe.focusPin(post.id, 900, () => {
+      globe.onPinArrived(post.id, () => {
         if (milestone.message) return;
         callouts.addCallout(post);
         audio.playLanding();

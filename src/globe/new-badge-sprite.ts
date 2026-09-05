@@ -1,7 +1,7 @@
 import { CanvasTexture, Group, Sprite, SpriteMaterial, SRGBColorSpace } from "three";
 
 /** Shared textures; each NEW label owns only its small sprite materials. */
-export const createNewBadges = () => {
+export const createNewBadgeSprites = () => {
   const texture = (star: boolean) => {
     const canvas = document.createElement("canvas");
     canvas.width = star ? 64 : 256;

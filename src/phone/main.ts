@@ -347,7 +347,7 @@ const renderArrived = (): HTMLElement => {
     const [lat, lon] = pinLatLon(post);
     globe.setRotationTo(lat, lon);
     globe.addPin(post, { animate: true });
-    globe.focusPin(post.id, 0, () => {
+    globe.onPinArrived(post.id, () => {
       audio.playLanding();
     });
     arrivedGlobe = globe;

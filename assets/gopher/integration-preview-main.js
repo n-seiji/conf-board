@@ -87,7 +87,7 @@ document.querySelector("#bubble").onclick = () => {
 };
 document.querySelector("#look").onclick = () => {
   globe.setAutoRotate(false);
-  globe.centerPin(post.id, 700, () => {
+  globe.centerPin(post.id, () => {
     status.textContent = "中央：足元を残して腰から見上げ中";
   });
 };
@@ -102,7 +102,7 @@ document.querySelector("#arrive").onclick = () => {
   globe.addPin(post, { animate: true });
   const start = performance.now();
   status.textContent = "ワープ登場待ち（モデル準備中）";
-  globe.focusPin(post.id, 700, () => {
+  globe.onPinArrived(post.id, () => {
     bubbleVisible = true;
     callouts.addCallout(post);
     status.textContent =
@@ -111,7 +111,7 @@ document.querySelector("#arrive").onclick = () => {
 };
 globe.onPinPicked((id) => {
   globe.setAutoRotate(false);
-  globe.centerPin(id, 700, () => {
+  globe.centerPin(id, () => {
     status.textContent = "クリック選択：見上げ中";
   });
 });

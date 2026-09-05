@@ -12,7 +12,7 @@ import type { PinColorId } from "../shared/colors";
 
 /**
  * Gopherの読み込み中・失敗時に使うフォールバックと、共通の配置契約。
- * 通常の見た目・アニメーションは gopher-pins.ts が担当する。
+ * 通常の見た目・アニメーションは character-pins.ts が担当する。
  * - 原点 (0,0,0) はピンの先端 (球面に接する点)。
  * - +Y が「上」(球面から離れる方向)。
  * - 全体の高さは `PIN_HEIGHT` (球半径 1 に対する比率)。

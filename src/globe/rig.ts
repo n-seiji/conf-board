@@ -7,10 +7,10 @@ import { Group, type Object3D, Vector3 } from "three";
 
 export const TILT_DEG = 12;
 export const ROTATION_PERIOD_SEC = 48;
-export const DEFAULT_FOCUS_DURATION_MS = 900;
-/** これを超えて focus 待ちが積み上がった分は、正面合わせをせずその場で即着地させる。 */
+export const CENTER_DURATION_MS = 700;
+/** これを超えて centerOn 待ちが積み上がった分は、正面合わせをせずその場で即着地させる。 */
 export const MAX_FOCUS_QUEUE = 3;
-/** キューに後続が残っている間、1 件あたりの focus 所要時間をこれまで短縮して追いつく。 */
+/** キューに後続が残っている間、1 件あたりの centerOn 所要時間をこれまで短縮して追いつく。 */
 export const BACKLOG_DURATION_MS = 500;
 /** ドラッグ/ホイールで許容する tilt の最大絶対値 (度)。北極・南極が見えなくなるほど傾けさせない。 */
 export const MAX_TILT_DEG = 60;
@@ -50,9 +50,8 @@ type FocusAnimation = Readonly<{
   pinId: string;
   fromY: number;
   toY: number;
-  /** tilt も一緒に動かす場合の開始角・目標角 (rad)。未指定なら spin のみのアニメーション。 */
-  fromTilt?: number;
-  toTilt?: number;
+  fromTilt: number;
+  toTilt: number;
   startedAt: number;
   durationMs: number;
   onArrived?: () => void;
@@ -61,8 +60,6 @@ type FocusAnimation = Readonly<{
 type FocusRequest = Readonly<{
   pinId: string;
   durationMs: number;
-  /** true: 経度 (spin) に加えて緯度 (tilt) も正面中央に合わせる (`startCenterOn` 用)。 */
-  tilt?: boolean;
   onArrived?: () => void;
 }>;
 
@@ -95,11 +92,10 @@ export class GlobeRig {
   private pins = new Map<string, RigPin>();
   private focusAnimation: FocusAnimation | null = null;
   /**
-   * focusPin は同時に 1 件しかアニメーションできないため、実行中に別の focusPin が
-   * 呼ばれた場合はここに積んでおき、完了ごとに次を開始する。これをしないと、投稿が
-   * 900ms 未満の間隔で連続到着したとき、先に呼ばれた focusPin の focusAnimation が
-   * 後発の呼び出しに上書きされて消え、その onArrived が永久に呼ばれなくなる
-   * (吹き出し・波紋・音が出ないまま止まって見えるバグの原因)。
+   * centerOn は同時に 1 件しかアニメーションできないため、実行中に別の centerOn が
+   * 呼ばれた場合はここに積んでおき、完了ごとに次を開始する。上書きで捨てると、
+   * ピンを短い間隔で続けてクリックしたとき先に呼ばれた centerOn の onArrived が
+   * 永久に呼ばれず、吹き出しが出ないまま止まって見える。
    */
   private focusQueue: FocusRequest[] = [];
 
@@ -124,7 +120,7 @@ export class GlobeRig {
     this.pins.delete(id);
     if (this.focusAnimation?.pinId === id) {
       this.focusAnimation = null;
-      // このピンの focus が消えたので、キューに次があれば進める (止まったままにしない)。
+      // このピンの centerOn が消えたので、キューに次があれば進める (止まったままにしない)。
       this.tryStartNextFocus(performance.now());
     }
     return pin.object;
@@ -154,17 +150,17 @@ export class GlobeRig {
   }
 
   /**
-   * 指定したピンの経度が正面に来るまでの ease-out アニメーションをキューに積む。
-   * 既に別のピンの focus 中なら、それが完了してから順番に開始する (取りこぼさない)。
-   * ただしキューが `MAX_FOCUS_QUEUE` 件を超える分は自転を止めてまで待たせず、
-   * focus (正面合わせの回転) をせずにその場で `onArrived` を即座に呼ぶ
-   * (投稿が連投されたときに自転が止まったまま浮いたピンが溜まるのを防ぐ)。
+   * 指定したピンの経度・緯度がともにカメラ正面中央 (法線が (0,0,1)) に来るまで
+   * ease-out で回転する。既に別のピンの centerOn 中なら、それが完了してから
+   * 順番に開始する (取りこぼさない)。ただしキューが `MAX_FOCUS_QUEUE` 件を超える分は
+   * 自転を止めてまで待たせず、回転をせずにその場で `onArrived` を即座に呼ぶ
+   * (クリックが連打されたときに自転が止まったまま待ちが溜まるのを防ぐ)。
    * `nowMs` は呼び出し時刻 (`performance.now()` 等)。実際に回転が進むのは `tick` 呼び出し時。
    */
-  focusPin(
+  centerOn(
     id: string,
     nowMs: number,
-    durationMs = DEFAULT_FOCUS_DURATION_MS,
+    durationMs = CENTER_DURATION_MS,
     onArrived?: () => void,
   ): void {
     if (this.focusQueue.length >= MAX_FOCUS_QUEUE) {
@@ -172,28 +168,6 @@ export class GlobeRig {
       return;
     }
     this.focusQueue.push({ pinId: id, durationMs, onArrived });
-    this.tryStartNextFocus(nowMs);
-  }
-
-  /**
-   * 指定したピンの経度・緯度がともにカメラ正面中央 (法線が (0,0,1)) に来るまで
-   * ease-out で回転する。`focusPin` (到着演出、経度のみ合わせる) と同じキュー・
-   * `focusAnimation` スロットを共有するため、到着演出の最中に呼ばれた場合はその
-   * 完了を待ってから開始し、逆にこのアニメーション中に到着演出が呼ばれた場合は
-   * それがキューに積まれて後から実行される (同時に 2 つは走らない)。
-   * 着地アニメーション・波紋は再生しない (`index.ts` 側でも呼ばない)。
-   */
-  startCenterOn(
-    id: string,
-    nowMs: number,
-    durationMs = DEFAULT_FOCUS_DURATION_MS,
-    onArrived?: () => void,
-  ): void {
-    if (this.focusQueue.length >= MAX_FOCUS_QUEUE) {
-      onArrived?.();
-      return;
-    }
-    this.focusQueue.push({ pinId: id, durationMs, tilt: true, onArrived });
     this.tryStartNextFocus(nowMs);
   }
 
@@ -216,16 +190,13 @@ export class GlobeRig {
     // 後続が詰まっている間は 1 件あたりの所要時間を短縮して早く追いつく。
     const durationMs =
       this.focusQueue.length > 0 ? Math.min(next.durationMs, BACKLOG_DURATION_MS) : next.durationMs;
-    // startCenterOn (tilt: true) のときだけ、緯度に対応する tiltGroup.rotation.x も合わせて動かす。
     // localDir.y は latLonToVector3 の定義上 sin(lat) に等しいので、asin で緯度 (rad) に戻せる。
-    const toTilt = next.tilt
-      ? Math.min(MAX_TILT_RAD, Math.max(-MAX_TILT_RAD, Math.asin(pin.localDir.y)))
-      : undefined;
+    const toTilt = Math.min(MAX_TILT_RAD, Math.max(-MAX_TILT_RAD, Math.asin(pin.localDir.y)));
     this.focusAnimation = {
       pinId: next.pinId,
       fromY,
       toY: fromY + delta,
-      fromTilt: next.tilt ? this.tiltGroup.rotation.x : undefined,
+      fromTilt: this.tiltGroup.rotation.x,
       toTilt,
       startedAt: nowMs,
       durationMs,
@@ -234,8 +205,8 @@ export class GlobeRig {
   }
 
   /**
-   * dtSeconds 分の自転 (もしくは focus アニメーション) を進める。
-   * `nowMs` は focus アニメーションの経過時間計算に使う絶対時刻。
+   * dtSeconds 分の自転 (もしくは centerOn アニメーション) を進める。
+   * `nowMs` は centerOn アニメーションの経過時間計算に使う絶対時刻。
    * 呼び出し後は `tiltGroup.updateMatrixWorld(true)` 済みで、即座に world 座標を読める
    * (WebGLRenderer.render を待たずに `projectPin` や `onArrived` 内の位置参照が最新になる)。
    */
@@ -248,9 +219,7 @@ export class GlobeRig {
       const t = Math.min(1, (nowMs - startedAt) / durationMs);
       const eased = easeOutCubic(t);
       this.spinGroup.rotation.y = fromY + (toY - fromY) * eased;
-      if (fromTilt !== undefined && toTilt !== undefined) {
-        this.tiltGroup.rotation.x = fromTilt + (toTilt - fromTilt) * eased;
-      }
+      this.tiltGroup.rotation.x = fromTilt + (toTilt - fromTilt) * eased;
       if (t >= 1) {
         this.focusAnimation = null;
         this.tiltGroup.updateMatrixWorld(true);
@@ -272,7 +241,7 @@ export class GlobeRig {
    * ドラッグ/ホイール操作による手動回転を spinGroup/tiltGroup に加える。
    * `deltaSpinRad` は spinGroup.rotation.y に、`deltaTiltRad` は tiltGroup.rotation.x に
    * そのまま加算し、tilt は ±`MAX_TILT_DEG` にクランプする (極が裏返らないようにする)。
-   * focus アニメーション中は到着演出を優先し、手動回転は無視する (no-op)。
+   * centerOn アニメーション中はそちらを優先し、手動回転は無視する (no-op)。
    */
   rotateBy(deltaSpinRad: number, deltaTiltRad: number): void {
     if (this.focusAnimation) return;

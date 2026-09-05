@@ -59,7 +59,7 @@ describe("GlobeRig.tick (b): 自転方向が左→右", () => {
   });
 });
 
-describe("GlobeRig.focusPin (c)", () => {
+describe("GlobeRig.centerOn (c)", () => {
   it("現在角から最短方向で目標角に到達し、到達後は通常の自転が続く", () => {
     const rig = new GlobeRig();
     const mesh = makePinMesh();
@@ -72,7 +72,7 @@ describe("GlobeRig.focusPin (c)", () => {
 
     let arrivedCount = 0;
     const now0 = 1000;
-    rig.focusPin("p", now0, 300, () => {
+    rig.centerOn("p", now0, 300, () => {
       arrivedCount++;
     });
     expect(rig.isFocusing()).toBe(true);
@@ -82,7 +82,7 @@ describe("GlobeRig.focusPin (c)", () => {
     expect(rig.isFocusing()).toBe(true);
     expect(arrivedCount).toBe(0);
 
-    // アニメーション完了時刻を過ぎたら onArrived が呼ばれ、focus が終了する。
+    // アニメーション完了時刻を過ぎたら onArrived が呼ばれ、centerOn が終了する。
     rig.tick(0.1, now0 + 300);
     expect(arrivedCount).toBe(1);
     expect(rig.isFocusing()).toBe(false);
@@ -104,7 +104,7 @@ describe("GlobeRig.focusPin (c)", () => {
     mesh.position.copy(dir).multiplyScalar(1.006);
     rig.addPin("p", mesh, dir);
 
-    rig.focusPin("p", 0, 900);
+    rig.centerOn("p", 0, 900);
     // private だが、動作からの推定: 900ms 経過させて到達させ、回転量が 2π 未満に収まることを
     // spinGroup.rotation.y の総変化量から確認する (単純に |Δrotation| <= π であるはず)。
     const beforeY = rig.spinGroup.rotation.y;
@@ -112,6 +112,36 @@ describe("GlobeRig.focusPin (c)", () => {
     const afterY = rig.spinGroup.rotation.y;
     const delta = Math.abs(afterY - beforeY);
     expect(delta).toBeLessThanOrEqual(Math.PI + 1e-6);
+  });
+
+  it("完了後、ピンの world 法線が (0,0,1) になる (spin/tilt とも)", () => {
+    const rig = new GlobeRig();
+    const mesh = makePinMesh();
+    const dir = latLonToVector3(40, 70, 1);
+    mesh.position.copy(dir).multiplyScalar(1.006);
+    rig.addPin("p", mesh, dir);
+
+    rig.centerOn("p", 0, 900);
+    rig.tick(0.9, 900);
+
+    const projected = rig.projectPin("p", -1);
+    expect(projected).not.toBeNull();
+    expect(projected?.normal.x ?? 1).toBeCloseTo(0, 6);
+    expect(projected?.normal.y ?? 1).toBeCloseTo(0, 6);
+    expect(projected?.normal.z ?? 0).toBeCloseTo(1, 6);
+  });
+
+  it("緯度80度のピンでは tilt が ±MAX_TILT_DEG (60度) にクランプされる", () => {
+    const rig = new GlobeRig();
+    const mesh = makePinMesh();
+    const dir = latLonToVector3(80, 0, 1);
+    mesh.position.copy(dir).multiplyScalar(1.006);
+    rig.addPin("p", mesh, dir);
+
+    rig.centerOn("p", 0, 900);
+    rig.tick(0.9, 900);
+
+    expect(rig.tiltGroup.rotation.x).toBeCloseTo((60 * Math.PI) / 180, 6);
   });
 });
 
@@ -144,7 +174,7 @@ describe("GlobeRig.projectPin (d): 裏側判定", () => {
   });
 });
 
-describe("GlobeRig: focusPin 到達直後に tick を挟まず projectPin できる (staleness 回帰テスト)", () => {
+describe("GlobeRig: centerOn 到達直後に tick を挟まず projectPin できる (staleness 回帰テスト)", () => {
   it("onArrived コールバック内で projectPin しても最新の回転結果が反映されている", () => {
     const rig = new GlobeRig();
     const mesh = makePinMesh();
@@ -154,7 +184,7 @@ describe("GlobeRig: focusPin 到達直後に tick を挟まず projectPin でき
     rig.setRotationTo(0, -90); // ピンを裏側からスタートさせる
 
     let dotAtArrival: number | null = null;
-    rig.focusPin("p", 0, 900, () => {
+    rig.centerOn("p", 0, 900, () => {
       // tick() が onArrived を呼ぶ「その場」で projectPin した値が、
       // 別途 tick 後に呼んだ場合と同じ (= 古い行列を読んでいない) ことを確認する。
       dotAtArrival = rig.projectPin("p", BACKSIDE_DOT_THRESHOLD)?.dot ?? null;
@@ -166,8 +196,8 @@ describe("GlobeRig: focusPin 到達直後に tick を挟まず projectPin でき
   });
 });
 
-describe("GlobeRig.focusPin: 連続到着時のキューイング (取りこぼし回帰テスト)", () => {
-  it("focus 中に別の focusPin を呼んでも、先発の onArrived が失われず両方とも順番に呼ばれる", () => {
+describe("GlobeRig.centerOn: 連続到着時のキューイング (取りこぼし回帰テスト)", () => {
+  it("centerOn 中に別の centerOn を呼んでも、先発の onArrived が失われず両方とも順番に呼ばれる", () => {
     const rig = new GlobeRig();
     const addPinAt = (id: string, lat: number, lon: number) => {
       const mesh = makePinMesh();
@@ -179,16 +209,16 @@ describe("GlobeRig.focusPin: 連続到着時のキューイング (取りこぼ�
     addPinAt("b", 0, -90);
 
     const arrivedOrder: string[] = [];
-    // 投稿 a が届いて focus 開始 (900ms アニメーション)。
-    rig.focusPin("a", 0, 900, () => arrivedOrder.push("a"));
+    // 投稿 a が届いて centerOn 開始 (900ms アニメーション)。
+    rig.centerOn("a", 0, 900, () => arrivedOrder.push("a"));
     // その 100ms 後、まだ a のアニメーション中に投稿 b が届く (900ms 未満の間隔)。
-    rig.focusPin("b", 100, 900, () => arrivedOrder.push("b"));
+    rig.centerOn("b", 100, 900, () => arrivedOrder.push("b"));
 
     // a のアニメーションが完了する時刻まで進める。
     rig.tick(0.1, 100);
     rig.tick(0.8, 900);
     expect(arrivedOrder).toEqual(["a"]);
-    expect(rig.isFocusing()).toBe(true); // 続けて b の focus が自動的に始まっている
+    expect(rig.isFocusing()).toBe(true); // 続けて b の centerOn が自動的に始まっている
 
     // b のアニメーションも完了させる (a 完了時刻 900ms から 900ms 後)。
     rig.tick(0.9, 1800);
@@ -206,9 +236,9 @@ describe("GlobeRig.focusPin: 連続到着時のキューイング (取りこぼ�
     }
 
     const arrivedOrder: string[] = [];
-    rig.focusPin("a", 0, 900, () => arrivedOrder.push("a"));
-    rig.focusPin("b", 30, 900, () => arrivedOrder.push("b"));
-    rig.focusPin("c", 60, 900, () => arrivedOrder.push("c"));
+    rig.centerOn("a", 0, 900, () => arrivedOrder.push("a"));
+    rig.centerOn("b", 30, 900, () => arrivedOrder.push("b"));
+    rig.centerOn("c", 60, 900, () => arrivedOrder.push("c"));
 
     // 3件それぞれの完了時刻を跨いで十分な時間 tick する。
     let now = 60;
@@ -220,7 +250,7 @@ describe("GlobeRig.focusPin: 連続到着時のキューイング (取りこぼ�
     expect(arrivedOrder).toEqual(["a", "b", "c"]);
   });
 
-  it("キューが上限を超えた分は focus せずその場で即座に onArrived を呼ぶ (自転停止の防止)", () => {
+  it("キューが上限を超えた分は centerOn せずその場で即座に onArrived を呼ぶ (自転停止の防止)", () => {
     const rig = new GlobeRig();
     for (const id of ["a", "b", "c", "d", "e"]) {
       const mesh = makePinMesh();
@@ -230,11 +260,11 @@ describe("GlobeRig.focusPin: 連続到着時のキューイング (取りこぼ�
     }
 
     const arrivedOrder: string[] = [];
-    rig.focusPin("a", 0, 900, () => arrivedOrder.push("a")); // 即座に focusAnimation として開始
-    rig.focusPin("b", 0, 900, () => arrivedOrder.push("b")); // キューへ (1件目)
-    rig.focusPin("c", 0, 900, () => arrivedOrder.push("c")); // キューへ (2件目)
-    rig.focusPin("d", 0, 900, () => arrivedOrder.push("d")); // キューへ (3件目、上限)
-    rig.focusPin("e", 0, 900, () => arrivedOrder.push("e")); // 上限超過 → 即座に onArrived
+    rig.centerOn("a", 0, 900, () => arrivedOrder.push("a")); // 即座に focusAnimation として開始
+    rig.centerOn("b", 0, 900, () => arrivedOrder.push("b")); // キューへ (1件目)
+    rig.centerOn("c", 0, 900, () => arrivedOrder.push("c")); // キューへ (2件目)
+    rig.centerOn("d", 0, 900, () => arrivedOrder.push("d")); // キューへ (3件目、上限)
+    rig.centerOn("e", 0, 900, () => arrivedOrder.push("e")); // 上限超過 → 即座に onArrived
 
     // e はまだ何も tick していない時点で、既に即着地扱いで呼ばれているはず。
     expect(arrivedOrder).toEqual(["e"]);
@@ -251,9 +281,9 @@ describe("GlobeRig.focusPin: 連続到着時のキューイング (取りこぼ�
 
     const arrivedOrder: string[] = [];
     // a b c を tick 前に一気に積む: a は即座に開始 (キュー長 0)、b・c はキューに残る。
-    rig.focusPin("a", 0, 900, () => arrivedOrder.push("a"));
-    rig.focusPin("b", 0, 900, () => arrivedOrder.push("b"));
-    rig.focusPin("c", 0, 900, () => arrivedOrder.push("c"));
+    rig.centerOn("a", 0, 900, () => arrivedOrder.push("a"));
+    rig.centerOn("b", 0, 900, () => arrivedOrder.push("b"));
+    rig.centerOn("c", 0, 900, () => arrivedOrder.push("c"));
 
     // a 完了時、キューには [b, c] が残っている (b を取り出した後もキュー長 1 > 0) ので
     // b は 900ms ではなく BACKLOG_DURATION_MS (500ms) で完了するはず。
@@ -289,13 +319,13 @@ describe("GlobeRig.rotateBy", () => {
     expect(rig.tiltGroup.rotation.x).toBeCloseTo((-60 * Math.PI) / 180);
   });
 
-  it("focus アニメーション中は no-op になる", () => {
+  it("centerOn アニメーション中は no-op になる", () => {
     const rig = new GlobeRig();
     const mesh = makePinMesh();
     const dir = latLonToVector3(0, 90, 1);
     mesh.position.copy(dir).multiplyScalar(1.006);
     rig.addPin("a", mesh, dir);
-    rig.focusPin("a", 0, 900);
+    rig.centerOn("a", 0, 900);
     const spinBefore = rig.spinGroup.rotation.y;
     const tiltBefore = rig.tiltGroup.rotation.x;
     rig.rotateBy(0.3, 0.3);
@@ -317,60 +347,5 @@ describe("GlobeRig.settleTilt", () => {
       expect(rig.tiltGroup.rotation.x).toBeGreaterThanOrEqual(rig.tiltRad - 1e-6);
     }
     expect(rig.tiltGroup.rotation.x).toBeCloseTo(rig.tiltRad, 2);
-  });
-});
-
-describe("GlobeRig.startCenterOn", () => {
-  it("完了後、ピンの world 法線が (0,0,1) になる (spin/tilt とも)", () => {
-    const rig = new GlobeRig();
-    const mesh = makePinMesh();
-    const dir = latLonToVector3(40, 70, 1);
-    mesh.position.copy(dir).multiplyScalar(1.006);
-    rig.addPin("p", mesh, dir);
-
-    rig.startCenterOn("p", 0, 900);
-    rig.tick(0.9, 900);
-
-    const projected = rig.projectPin("p", -1);
-    expect(projected).not.toBeNull();
-    expect(projected?.normal.x ?? 1).toBeCloseTo(0, 6);
-    expect(projected?.normal.y ?? 1).toBeCloseTo(0, 6);
-    expect(projected?.normal.z ?? 0).toBeCloseTo(1, 6);
-  });
-
-  it("緯度80度のピンでは tilt が ±MAX_TILT_DEG (60度) にクランプされる", () => {
-    const rig = new GlobeRig();
-    const mesh = makePinMesh();
-    const dir = latLonToVector3(80, 0, 1);
-    mesh.position.copy(dir).multiplyScalar(1.006);
-    rig.addPin("p", mesh, dir);
-
-    rig.startCenterOn("p", 0, 900);
-    rig.tick(0.9, 900);
-
-    expect(rig.tiltGroup.rotation.x).toBeCloseTo((60 * Math.PI) / 180, 6);
-  });
-
-  it("到着 focus (focusPin) 実行中に呼ぶとキューに積まれ、同時には走らない", () => {
-    const rig = new GlobeRig();
-    for (const id of ["a", "b"]) {
-      const mesh = makePinMesh();
-      const dir = latLonToVector3(0, 90, 1);
-      mesh.position.copy(dir).multiplyScalar(1.006);
-      rig.addPin(id, mesh, dir);
-    }
-
-    const arrivedOrder: string[] = [];
-    rig.focusPin("a", 0, 900, () => arrivedOrder.push("a"));
-    rig.startCenterOn("b", 0, 900, () => arrivedOrder.push("b"));
-
-    rig.tick(0.5, 500);
-    expect(arrivedOrder).toEqual([]); // まだどちらも完了していない (a が実行中)
-
-    rig.tick(0.4, 900);
-    expect(arrivedOrder).toEqual(["a"]); // a 完了、b が開始される
-
-    rig.tick(0.9, 1800);
-    expect(arrivedOrder).toEqual(["a", "b"]);
   });
 });

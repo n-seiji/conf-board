@@ -1,20 +1,15 @@
 import {
-  AdditiveBlending,
-  Color,
-  DirectionalLight,
-  DoubleSide,
-  HemisphereLight,
   Mesh,
-  MeshBasicMaterial,
   MeshStandardMaterial,
   type Object3D,
   PerspectiveCamera,
   Quaternion,
-  RingGeometry,
   Scene,
   SphereGeometry,
   Vector3,
   WebGLRenderer,
+  HemisphereLight,
+  DirectionalLight,
 } from "three";
 import { pinColorHex } from "../shared/colors";
 import type { Post } from "../shared/types";
@@ -25,20 +20,25 @@ import {
   nearestPinWithin,
 } from "./interaction";
 import { orientPinToNormal } from "./pin-mesh";
-import { createGopherPins } from "./gopher-pins";
-import { createRenPins, isRenPost } from "./ren-pins";
+import {
+  createGopherPins,
+  createRenPins,
+  isRenPost,
+  occupiedRadiusFor,
+  REN_FALL_DURATION_MS,
+} from "./characters";
 import { fallingPosition } from "./arrival";
 import {
-  advanceNewGopher,
-  dismissNewGopher,
-  newGopherState,
+  advanceNewBadge,
+  dismissNewBadge,
+  createNewBadgeState,
   newBadgePlacement,
-  type NewGopherState,
-} from "./new-gopher";
-import { createNewBadges } from "./new-badge";
+  type NewBadgeState,
+} from "./new-badge-state";
+import { createNewBadgeSprites } from "./new-badge-sprite";
 import { spacedPinLatLon, type OccupiedPin } from "./pins";
 import {
-  DEFAULT_FOCUS_DURATION_MS,
+  CENTER_DURATION_MS,
   GlobeRig,
   TILT_DEG,
   ROTATION_PERIOD_SEC,
@@ -46,12 +46,9 @@ import {
 } from "./rig";
 import { createWorldTexture } from "./world-texture";
 import { createMessageGlobe } from "./message-globe";
-
-export { latLonToVector3, TILT_DEG, frontFacingAngle } from "./rig";
+import { createRipples } from "./ripple";
 
 const SPHERE_RADIUS = 1;
-/** 着地済みピンの先端 (テクスチャ下端) が接する球面からの距離。 */
-const RIPPLE_SURFACE_OFFSET = 1.002;
 /** 描画するピンの上限。display 側の snapshot スライスにも同じ値を使う (`MAX_PIN_MESHES` を import)。 */
 export const MAX_PIN_MESHES = 200;
 const CAMERA_FOV = 25;
@@ -73,11 +70,6 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 2.5;
 /** 自転再開後、ズームを既定 (1倍) へ戻す速さ (`settleTilt` と同じ考え方)。 */
 const ZOOM_SETTLE_RATE = 3;
-const RIPPLE_DURATION_MS = 900;
-const RIPPLE_INNER_START = 0.04;
-const RIPPLE_OUTER_START = 0.3;
-/** 外側の波紋リングを内側より遅らせて開始する時間 (ms)。同時開始だと重なって1本に見えるため。 */
-const RIPPLE_OUTER_DELAY_MS = 150;
 /**
  * 法線とカメラ方向の内積がこれ未満なら裏側とみなし非表示にする (吹き出し・リーダー線用)。
  * 仕様上の裏側判定は 0.05 (ほぼ真横) だが、その値では球の縁 (limb) 付近で
@@ -86,20 +78,16 @@ const RIPPLE_OUTER_DELAY_MS = 150;
  * depth buffer に自然に隠れ、この閾値は吹き出し・リーダー線の表示判定にのみ影響する。
  */
 const BACKSIDE_DOT_THRESHOLD = 0.15;
-
-type Ripple = Readonly<{
-  meshes: readonly [Mesh, Mesh];
-  startedAt: number;
-}>;
+/** 頭上の NEW バッジを、頭の真上からこの分だけ持ち上げる。 */
+const NEW_BADGE_HEAD_OFFSET_Y = 0.075;
 
 type PinMeta = {
-  ripple: Ripple | null;
   arrived: boolean;
   ren: boolean;
   fallStarted?: number;
-  fresh: NewGopherState | null;
+  newBadge: NewBadgeState | null;
   onArrived?: () => void;
-  badge?: ReturnType<ReturnType<typeof createNewBadges>["create"]>;
+  badge?: ReturnType<ReturnType<typeof createNewBadgeSprites>["create"]>;
 };
 
 export type GlobeOptions = Readonly<{
@@ -142,16 +130,17 @@ export type GlobeHandle = Readonly<{
   clear: () => void;
   setRotationTo: (lat: number, lon: number) => void;
   /**
-   * 新規Gopherが配置先へ登場した時の通知を登録する。
-   * 互換性のため名前・引数を維持するが、強制回転・落下は行わずdurationMsは未使用。
+   * 新規ピンが配置先へ登場した時の通知を登録する。既に登場済み (arrived) なら
+   * 即座に onArrived を呼ぶ。未登場なら保存しておき、登場時に 1 回だけ呼ぶ
+   * (同じ id で呼び直すと後勝ちで上書きされる)。
    */
-  focusPin: (id: string, durationMs?: number, onArrived?: () => void) => void;
+  onPinArrived: (id: string, onArrived: () => void) => void;
   /**
    * クリック/タップされたピンを画面中央 (経度・緯度とも正面) へ回す。着地アニメーション・
    * 波紋は再生しない、選択演出専用のメソッド。「クリック → 中央へ回転 → onArrived で
    * 吹き出しを表示 → (呼び出し側で) 5 秒後に自転再開」という流れの、回転部分だけを担う。
    */
-  centerPin: (id: string, durationMs?: number, onArrived?: () => void) => void;
+  centerPin: (id: string, onArrived?: () => void) => void;
   dispose: () => void;
   onFrame: (cb: (elapsedSec: number) => void) => () => void;
   /** 動くGopherの頭の画面座標 (コンテナ基準px)。裏側・登場前はvisible=false。 */
@@ -186,27 +175,8 @@ export type GlobeHandle = Readonly<{
 
 /** 手動操作が止んでから自転を再開するまでのアイドル時間 (ms)。 */
 const IDLE_RESUME_MS = 5000;
-/** ピンのクリック/タップ判定半径 (px)。タッチでも押しやすいよう、実サイズより広めに取る。 */
 /** クリック判定の半径 (px)。先端〜頭の線分からこの距離以内ならそのピンとみなす。 */
 const PICK_RADIUS_PX = 22;
-/** `centerPin` の既定所要時間 (ms)。到着演出の `focusPin` (900ms) より短くし、選択操作への応答性を優先する。 */
-const CENTER_PIN_DURATION_MS = 700;
-
-const createRippleMeshes = (): readonly [Mesh, Mesh] => {
-  const makeRing = (opacity: number): Mesh => {
-    const geometry = new RingGeometry(RIPPLE_INNER_START, RIPPLE_INNER_START + 0.02, 32);
-    const material = new MeshBasicMaterial({
-      color: new Color("#ffffff"),
-      transparent: true,
-      opacity,
-      side: DoubleSide,
-      blending: AdditiveBlending,
-      depthWrite: false,
-    });
-    return new Mesh(geometry, material);
-  };
-  return [makeRing(1), makeRing(0.6)];
-};
 
 /**
  * 地球モジュール。ディスプレイ画面とスマホ到着画面で共用する。
@@ -234,7 +204,10 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
   scene.add(rig.tiltGroup);
 
   const sphereGeometry = new SphereGeometry(SPHERE_RADIUS, 64, 64);
-  const sphereMaterial = new MeshStandardMaterial({ map: createWorldTexture(), roughness: 0.85 });
+  const sphereMaterial = new MeshStandardMaterial({
+    map: createWorldTexture(),
+    roughness: 0.85,
+  });
   const sphereMesh = new Mesh(sphereGeometry, sphereMaterial);
   rig.spinGroup.add(sphereMesh);
 
@@ -247,7 +220,8 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
   const gophers = createGopherPins();
   const rens = createRenPins();
   const charactersFor = (id: string) => (pinMeta.get(id)?.ren ? rens : gophers);
-  const newBadges = createNewBadges();
+  const newBadges = createNewBadgeSprites();
+  const ripples = createRipples(rig.pinsGroup);
   let modelsReady = false;
   void Promise.all([gophers.ready, rens.ready]).then(() => {
     modelsReady = true;
@@ -330,20 +304,15 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
   const resizeObserver = new ResizeObserver(resize);
   resizeObserver.observe(container);
 
-  const removePinInternal = (id: string): void => {
+  const removePin = (id: string): void => {
     const meta = pinMeta.get(id);
+    if (!meta) return;
     if (selectedPinId === id) selectPose(null);
-    meta?.badge?.dispose();
+    meta.badge?.dispose();
     // 個体の色・骨・ミキサーを解放。共有モデルは地球のdisposeまで保持する。
     charactersFor(id).remove(id);
     rig.removePin(id);
-    if (meta?.ripple) {
-      for (const m of meta.ripple.meshes) {
-        rig.pinsGroup.remove(m);
-        m.geometry.dispose();
-        (m.material as MeshBasicMaterial).dispose();
-      }
-    }
+    ripples.remove(id);
     pinMeta.delete(id);
     const idx = pinOrder.indexOf(id);
     if (idx >= 0) pinOrder.splice(idx, 1);
@@ -363,9 +332,12 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     for (const [id, meta] of pinMeta) {
       const existing = rig.getPin(id);
       if (existing)
-        occupied.push({ direction: existing.localDir, radius: meta.ren ? 0.156 : 0.12 });
+        occupied.push({
+          direction: existing.localDir,
+          radius: occupiedRadiusFor(meta.ren),
+        });
     }
-    const [lat, lon] = spacedPinLatLon(post, occupied, ren ? 0.156 : 0.12);
+    const [lat, lon] = spacedPinLatLon(post, occupied, occupiedRadiusFor(ren));
     const dir = latLonToVector3(lat, lon, 1);
     const willAnimate = addOptions.animate ?? true;
 
@@ -377,52 +349,40 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
 
     rig.addPin(post.id, object, dir);
     pinMeta.set(post.id, {
-      ripple: null,
       ren,
       arrived: !willAnimate,
-      fresh: willAnimate ? newGopherState() : null,
+      newBadge: willAnimate ? createNewBadgeState() : null,
     });
     pinOrder.push(post.id);
     while (pinOrder.length > MAX_PIN_MESHES) {
       const oldest = pinOrder[0];
-      if (oldest) removePinInternal(oldest);
+      if (oldest) removePin(oldest);
     }
   };
 
-  const removePin = (id: string): void => removePinInternal(id);
-
   const clear = (): void => {
-    for (const id of [...pinOrder]) removePinInternal(id);
+    for (const id of [...pinOrder]) removePin(id);
   };
 
   const setRotationTo = (lat: number, lon: number): void => {
     rig.setRotationTo(lat, lon);
   };
 
-  const triggerRipple = (id: string): void => {
-    const pin = rig.getPin(id);
-    const meta = pinMeta.get(id);
-    if (!pin || !meta) return;
-    const [inner, outer] = createRippleMeshes();
-    const ripplePosition = pin.localDir.clone().multiplyScalar(RIPPLE_SURFACE_OFFSET);
-    for (const ring of [inner, outer]) {
-      ring.position.copy(ripplePosition);
-      ring.lookAt(pin.localDir.clone().multiplyScalar(2));
-      rig.pinsGroup.add(ring);
-    }
-    meta.ripple = { meshes: [inner, outer], startedAt: performance.now() };
-  };
-
-  const focusPin = (
-    id: string,
-    _durationMs = DEFAULT_FOCUS_DURATION_MS,
-    onArrived?: () => void,
-  ): void => {
-    // Compatibility with callers: arrival is passive now, never force-spin or drop.
+  const onPinArrived = (id: string, onArrived: () => void): void => {
     const meta = pinMeta.get(id);
     if (!meta) return;
-    if (meta.arrived) onArrived?.();
+    if (meta.arrived) onArrived();
     else meta.onArrived = onArrived;
+  };
+
+  const dismissPinNew = (id: string): void => {
+    const meta = pinMeta.get(id);
+    if (meta?.newBadge) dismissNewBadge(meta.newBadge);
+    meta?.badge?.dispose();
+    if (meta) {
+      meta.badge = undefined;
+      meta.newBadge = null;
+    }
   };
 
   /**
@@ -430,27 +390,13 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
    * 選択操作だけは正面合わせを行う。新規投稿の受信では回転を変えない。
    * 回転後に腰から見上げ、呼び出し側で吹き出しを表示する。
    */
-  const dismissPinNew = (id: string): void => {
-    const meta = pinMeta.get(id);
-    if (meta?.fresh) dismissNewGopher(meta.fresh);
-    meta?.badge?.dispose();
-    if (meta) {
-      meta.badge = undefined;
-      meta.fresh = null;
-    }
-  };
-
-  const centerPin = (
-    id: string,
-    durationMs = CENTER_PIN_DURATION_MS,
-    onArrived?: () => void,
-  ): void => {
+  const centerPin = (id: string, onArrived?: () => void): void => {
     if (messageMode) return;
     dismissPinNew(id);
     selectPose(null);
     gophers.lookUp(null);
     rens.lookUp(null);
-    rig.startCenterOn(id, performance.now(), durationMs, () => {
+    rig.centerOn(id, performance.now(), CENTER_DURATION_MS, () => {
       // 手動操作中と同様、回転が終わって吹き出しが出てから 5 秒のアイドルを数え直す
       // (吹き出しが出た直後にすぐ自転が再開してしまうのを防ぐ)。
       idleResume?.touch();
@@ -463,27 +409,27 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
 
   const setNewBadgeCallout = (id: string, visible: boolean): boolean => {
     const meta = pinMeta.get(id);
-    const placement = newBadgePlacement(meta?.fresh ?? null, visible);
+    const placement = newBadgePlacement(meta?.newBadge ?? null, visible);
     meta?.badge?.setLabelVisible(placement === "head");
     return placement === "callout";
   };
 
-  const updateNewGophers = (now: number, autoRotation: number): void => {
+  const updateNewBadges = (now: number, autoRotation: number): void => {
     for (const [id, meta] of pinMeta) {
       const front = rig.projectPin(id, BACKSIDE_DOT_THRESHOLD)?.visible ?? false;
       if (meta.ren && meta.arrived) {
         const object = rig.getPin(id)?.object;
         if (object) object.visible = front;
       }
-      if (!meta.fresh || !modelsReady) continue;
+      if (!meta.newBadge || !modelsReady) continue;
       const pin = rig.getPin(id);
       if (!pin) continue;
       const projected = rig.projectPin(id, BACKSIDE_DOT_THRESHOLD);
-      if (meta.ren && meta.fresh.phase === "pending") {
+      if (meta.ren && meta.newBadge.phase === "pending") {
         // Wait until the destination faces the audience, then fall in screen-up space.
         if (!front && meta.fallStarted === undefined) continue;
         meta.fallStarted ??= now;
-        const progress = Math.min(1, (now - meta.fallStarted) / 1100);
+        const progress = Math.min(1, (now - meta.fallStarted) / REN_FALL_DURATION_MS);
         rig.pinsGroup.updateWorldMatrix(true, false);
         const surface = rig.pinsGroup.localToWorld(
           pin.localDir.clone().multiplyScalar(SPHERE_RADIUS),
@@ -493,63 +439,28 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
         if (progress < 1) continue;
         setPinDistance(pin.object, pin.localDir, SPHERE_RADIUS);
       }
-      if (advanceNewGopher(meta.fresh, autoRotation)) {
+      if (advanceNewBadge(meta.newBadge, autoRotation)) {
         meta.arrived = true;
         pin.object.visible = true;
         meta.badge = newBadges.create();
         scene.add(meta.badge.group);
         charactersFor(id).react(id);
-        triggerRipple(id);
+        ripples.spawn(id, pin.localDir);
         const callback = meta.onArrived;
         meta.onArrived = undefined;
         callback?.();
       }
-      if (meta.fresh.phase === "done") {
+      if (meta.newBadge.phase === "done") {
         meta.badge?.dispose();
         meta.badge = undefined;
-        meta.fresh = null;
+        meta.newBadge = null;
       } else if (meta.badge) {
         const head = charactersFor(id).headPosition(id);
-        if (head) meta.badge.group.position.copy(head).add(new Vector3(0, 0.075, 0));
+        if (head)
+          meta.badge.group.position.copy(head).add(new Vector3(0, NEW_BADGE_HEAD_OFFSET_Y, 0));
         meta.badge.group.visible = !messageMode && (projected?.visible ?? false);
         meta.badge.update(now / 1000);
       }
-    }
-  };
-
-  /** 波紋 1 本の見た目 (スケール・opacity) を t (0=開始, 1=終了, 負値=開始前) に応じて適用する。 */
-  const applyRippleState = (mesh: Mesh, t: number): void => {
-    const material = mesh.material as MeshBasicMaterial;
-    if (t < 0) {
-      // まだ開始時刻に達していない (外側リングの遅延中): 見えない状態にしておく。
-      material.opacity = 0;
-      return;
-    }
-    const clamped = Math.min(1, t);
-    const scale = RIPPLE_INNER_START + (RIPPLE_OUTER_START - RIPPLE_INNER_START) * clamped;
-    mesh.scale.setScalar(scale / RIPPLE_INNER_START);
-    material.opacity = (1 - clamped) * 0.8;
-  };
-
-  const updateRipples = (now: number): void => {
-    for (const meta of pinMeta.values()) {
-      if (!meta.ripple) continue;
-      const [inner, outer] = meta.ripple.meshes;
-      const innerT = (now - meta.ripple.startedAt) / RIPPLE_DURATION_MS;
-      // 外側リングは内側より RIPPLE_OUTER_DELAY_MS 遅れて開始する (重なって1本に見えないように)。
-      const outerT = (now - meta.ripple.startedAt - RIPPLE_OUTER_DELAY_MS) / RIPPLE_DURATION_MS;
-      // 終了判定は、後から終わる外側リングの完了を待つ。
-      if (outerT >= 1) {
-        for (const m of meta.ripple.meshes) {
-          rig.pinsGroup.remove(m);
-          m.geometry.dispose();
-          (m.material as MeshBasicMaterial).dispose();
-        }
-        meta.ripple = null;
-        continue;
-      }
-      applyRippleState(inner, innerT);
-      applyRippleState(outer, outerT);
     }
   };
 
@@ -561,19 +472,19 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     clock.last = now;
 
     // rig.tick は内部で updateMatrixWorld まで済ませるため、この後の
-    // (focus 完了時に呼ばれる) onArrived コールバック内の projectPin も常に最新の位置を読める。
+    // (centerOn 完了時に呼ばれる) onArrived コールバック内の projectPin も常に最新の位置を読める。
     const autoRotation =
       !messageMode && rig.autoRotate && !rig.isFocusing()
         ? (Math.max(0, dt) * Math.PI * 2) / ROTATION_PERIOD_SEC
         : 0;
     if (!messageMode) rig.tick(dt, now);
-    updateRipples(now);
+    ripples.update(now);
     if (!messageMode) {
       gophers.update(dt);
       rens.update(dt);
     }
     updateSelectedPose();
-    updateNewGophers(now, autoRotation);
+    updateNewBadges(now, autoRotation);
     if (messageMode)
       messageGlobe?.update(
         window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -731,7 +642,7 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
   };
 
   // 手動操作 (ドラッグ/ホイール) が始まったら自転を止め、5秒操作が無ければ再開する。
-  // focusPin の到着演出は autoRotate の値に依存しないため (rig.tick 参照)、
+  // NEW バッジの到着演出は autoRotate の値に依存しないため (rig.tick 参照)、
   // 一時停止中でも新規到着ピンへの回転・波紋は問題なく再生される。
   const idleResume = options.interactive
     ? createIdleResume(
@@ -769,6 +680,7 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     gophers.dispose();
     rens.dispose();
     newBadges.dispose();
+    ripples.dispose();
     messageGlobe?.dispose();
     sphereGeometry.dispose();
     sphereMaterial.map?.dispose();
@@ -790,7 +702,7 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     removePin,
     clear,
     setRotationTo,
-    focusPin,
+    onPinArrived,
     centerPin,
     dispose,
     onFrame,

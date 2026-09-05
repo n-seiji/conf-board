@@ -29,7 +29,7 @@ callouts.setAmbientEnabled(false);
 window.callouts = callouts;
 globe.onPinPicked((id) => {
   window.picked = id;
-  globe.centerPin(id, 0, () => callouts.addCallout(window.renPost));
+  globe.centerPin(id, () => callouts.addCallout(window.renPost));
 });
 const ren = {
   id: "ren-front",
@@ -44,5 +44,5 @@ const [lat, lon] = pinLatLon(ren);
 globe.setRotationTo(lat, lon);
 globe.addPin(ren, { animate: true });
 globe.addPin({ ...ren, id: "gopher-149", seq: 149 }, { animate: false });
-globe.focusPin(ren.id, 0, () => (window.renLanded = true));
+globe.onPinArrived(ren.id, () => (window.renLanded = true));
 window.renPost = ren;

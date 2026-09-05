@@ -11,7 +11,7 @@ import {
 } from "three";
 import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { describe, expect, it } from "vitest";
-import { createGopherPins, gopherVariation } from "./gopher-pins";
+import { createCharacterPins, characterVariation } from "./character-pins";
 
 const asset = (): GLTF => {
   const scene = new Group();
@@ -51,7 +51,7 @@ describe("Gopher pin lifecycle", () => {
     foot.position.set(0.57, 0.144, 0);
     root.add(body, foot);
     gltf.scene.add(root);
-    const pins = createGopherPins(async () => gltf);
+    const pins = createCharacterPins(async () => gltf);
     const object = pins.create("look", 0, "#FF8A80");
     await pins.ready;
     const beforeHead = pins.headPosition("look", new Vector3())!.clone();
@@ -83,12 +83,12 @@ describe("Gopher pin lifecycle", () => {
         new VectorKeyframeTrack("Body.scale", [0, 1.5, 3], [1, 1, 1, ...middle, 1, 1, 1]),
       ]);
     });
-    const pins = createGopherPins(async () => gltf);
+    const pins = createCharacterPins(async () => gltf);
     const objects = Array.from({ length: 24 }, (_, i) => pins.create(`post-${i}`, 0, "#FF8A80"));
     await pins.ready;
     pins.update(0.07);
     objects.forEach((object, i) => {
-      const variation = gopherVariation(`post-${i}`);
+      const variation = characterVariation(`post-${i}`);
       const mesh = object.getObjectByName("Body") as Mesh;
       const axis = { Dance: 0, Wave: 1, Hop: 2 }[variation.clip];
       mesh.scale.toArray().forEach((value, index) => {
@@ -103,7 +103,7 @@ describe("Gopher pin lifecycle", () => {
     expect((objects[0]!.getObjectByName("Body") as Mesh).morphTargetInfluences).toEqual([1, 0, 0]);
     for (let i = 0; i < 40; i++) pins.update(0.1);
     const restored = (objects[0]!.getObjectByName("Body") as Mesh).morphTargetInfluences;
-    const assigned = gopherVariation("post-0").expression;
+    const assigned = characterVariation("post-0").expression;
     expect(restored).toEqual([
       Number(assigned === "Smile"),
       Number(assigned === "Wink"),
@@ -113,7 +113,7 @@ describe("Gopher pin lifecycle", () => {
   });
 
   it("stands at the origin at the compact Gopher height", async () => {
-    const pins = createGopherPins(async () => ({ ...asset(), animations: [] }));
+    const pins = createCharacterPins(async () => ({ ...asset(), animations: [] }));
     const pin = pins.create("size", 0, "#FF8A80");
     await pins.ready;
     const bounds = new Box3().setFromObject(pin, true);
@@ -123,7 +123,7 @@ describe("Gopher pin lifecycle", () => {
   });
 
   it("animates without interaction and resumes looping after a reaction", async () => {
-    const pins = createGopherPins(async () => asset());
+    const pins = createCharacterPins(async () => asset());
     const a = pins.create("a", 0, "#FF8A80");
     const b = pins.create("b", 1, "#FFE082");
     pins.react("a"); // Can arrive while GLB is still loading.
@@ -139,13 +139,13 @@ describe("Gopher pin lifecycle", () => {
   });
 
   it("assigns reproducible, varied motion, expression and phase from post IDs", () => {
-    const variations = Array.from({ length: 60 }, (_, i) => gopherVariation(`post-${i}`));
+    const variations = Array.from({ length: 60 }, (_, i) => characterVariation(`post-${i}`));
     expect(new Set(variations.map((v) => v.clip))).toEqual(new Set(["Dance", "Wave", "Hop"]));
     expect(new Set(variations.map((v) => v.expression))).toEqual(
       new Set(["Neutral", "Smile", "Wink", "Surprised"]),
     );
     expect(new Set(variations.map((v) => v.phase)).size).toBeGreaterThan(40);
-    expect(gopherVariation("same-post")).toEqual(gopherVariation("same-post"));
+    expect(characterVariation("same-post")).toEqual(characterVariation("same-post"));
     for (const v of variations) {
       expect(v.phase).toBeGreaterThanOrEqual(0);
       expect(v.phase).toBeLessThan(1);
@@ -154,7 +154,7 @@ describe("Gopher pin lifecycle", () => {
 
   it("loads once and replaces placeholders without changing placement or post colors", async () => {
     let loads = 0;
-    const pins = createGopherPins(async () => {
+    const pins = createCharacterPins(async () => {
       loads++;
       return asset();
     });
@@ -178,7 +178,7 @@ describe("Gopher pin lifecycle", () => {
 
   it("does not resurrect removed pins when loading finishes", async () => {
     let resolve!: (value: GLTF) => void;
-    const pins = createGopherPins(
+    const pins = createCharacterPins(
       () =>
         new Promise((r) => {
           resolve = r;
@@ -193,7 +193,7 @@ describe("Gopher pin lifecycle", () => {
   });
 
   it("keeps a usable colored fallback when model loading fails", async () => {
-    const pins = createGopherPins(() => Promise.reject(new Error("offline")));
+    const pins = createCharacterPins(() => Promise.reject(new Error("offline")));
     const pin = pins.create("offline", 0, "#FF8A80");
     await pins.ready;
     expect(pin.getObjectByName("pin-head")).toBeDefined();
@@ -204,7 +204,7 @@ describe("Gopher pin lifecycle", () => {
 
   it("disposal prevents late attachment and releases the loaded asset", async () => {
     let resolve!: (value: GLTF) => void;
-    const pins = createGopherPins(
+    const pins = createCharacterPins(
       () =>
         new Promise((r) => {
           resolve = r;

@@ -8,8 +8,7 @@ import {
   Vector3,
 } from "three";
 import { describe, expect, it } from "vitest";
-import { frontFacingAngle, latLonToVector3 } from "./index";
-import { GlobeRig, TILT_DEG } from "./rig";
+import { GlobeRig, TILT_DEG, frontFacingAngle, latLonToVector3 } from "./rig";
 
 const CAMERA_FOV = 25;
 

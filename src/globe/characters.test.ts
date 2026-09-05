@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Bone, Vector3, BoxGeometry, Group, Mesh, MeshBasicMaterial } from "three";
 import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
-import { createRenPins, isRenPost } from "./ren-pins";
+import { createRenPins, isRenPost } from "./characters";
 
 describe("Ren pins", () => {
   it("uses the persistent post sequence starting at 150, including restored posts", () => {

@@ -9,8 +9,8 @@ import {
   TubeGeometry,
   Vector3,
 } from "three";
-import { FontLoader } from "three/examples/jsm/loaders/FontLoader.js";
-import { TessellateModifier } from "three/examples/jsm/modifiers/TessellateModifier.js";
+import { FontLoader } from "three/addons/loaders/FontLoader.js";
+import { TessellateModifier } from "three/addons/modifiers/TessellateModifier.js";
 import fontData from "./message-font-bold.json";
 
 const ROWS = [

@@ -1,6 +1,7 @@
+import type { Vector3 } from "three";
 import { latLonToVector3 } from "./rig";
 import type { Post } from "../shared/types";
-import type { RegionsData } from "./regions-gen";
+import { CANDIDATE_MAX_LAT, CANDIDATE_MIN_LAT, type RegionsData } from "./regions-gen";
 import regionsData from "./regions.json";
 
 const regions = regionsData as unknown as RegionsData;
@@ -29,7 +30,10 @@ export const pinLatLon = (post: Pick<Post, "id" | "countryId">): readonly [numbe
 };
 
 /** Character clearance on the unit globe, including room for arm motions. */
-export type OccupiedPin = Readonly<{ direction: import("three").Vector3; radius: number }>;
+export type OccupiedPin = Readonly<{
+  direction: Vector3;
+  radius: number;
+}>;
 
 const spacingCandidates = new Map<number, readonly (readonly [number, number])[]>();
 const candidatesFor = (countryId: number): readonly (readonly [number, number])[] => {
@@ -41,7 +45,7 @@ const candidatesFor = (countryId: number): readonly (readonly [number, number])[
   grid.countryByCell.forEach((country, i) => {
     if (country !== id) return;
     const lat = grid.lat0 + Math.floor(i / grid.cols) * grid.step;
-    if (lat < -50 || lat > 65) return;
+    if (lat < CANDIDATE_MIN_LAT || lat > CANDIDATE_MAX_LAT) return;
     candidates.push([lat, grid.lon0 + (i % grid.cols) * grid.step]);
   });
   spacingCandidates.set(id, candidates);

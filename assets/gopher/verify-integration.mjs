@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { Vector3 } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { createGopherPins } from "../../src/globe/gopher-pins.ts";
+import { createGopherPins } from "../../src/globe/characters.ts";
 
 const bytes = await readFile(new URL("../../public/models/gopher.glb", import.meta.url));
 const asset = await new GLTFLoader().parseAsync(

@@ -12,7 +12,7 @@ import {
   type Skeleton,
   type Object3D,
 } from "three";
-import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
+import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 import { createPinObject, PIN_HEIGHT } from "./pin-mesh";
 import { fnv1a32 } from "./pins";
@@ -21,7 +21,7 @@ const MODEL_HEIGHT = 2.844;
 const CLIPS = ["Dance", "Wave", "Hop"] as const;
 const EXPRESSIONS = ["Neutral", "Smile", "Wink", "Surprised"] as const;
 /** Stable pseudo-random variety, independent of the user's chosen body color. */
-export const gopherVariation = (id: string) => ({
+export const characterVariation = (id: string) => ({
   clip: CLIPS[fnv1a32(`motion:${id}`) % CLIPS.length]!,
   expression: EXPRESSIONS[fnv1a32(`expression:${id}`) % EXPRESSIONS.length]!,
   phase: fnv1a32(`phase:${id}`) / 0x100000000,
@@ -44,7 +44,7 @@ type Pin = {
   leanApplied: boolean;
 };
 
-export type CharacterOptions = {
+export type CharacterOptions = Readonly<{
   name?: string;
   height?: number;
   clips?: readonly string[];
@@ -52,14 +52,10 @@ export type CharacterOptions = {
   recolor?: boolean;
   headBone?: string;
   bodyBone?: string;
-};
+}>;
 
 /** One asset load per globe; instances own bones and color, but share geometry. */
-export const createGopherPins = (
-  load: () => Promise<GLTF> = () =>
-    new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}models/gopher.glb`),
-  options: CharacterOptions = {},
-) => {
+export const createCharacterPins = (load: () => Promise<GLTF>, options: CharacterOptions = {}) => {
   const pins = new Map<string, Pin>();
   let asset: GLTF | undefined;
   let disposed = false;
@@ -212,9 +208,11 @@ export const createGopherPins = (
         remaining: 0,
         pendingReaction: false,
         variation: {
-          ...gopherVariation(id),
+          ...characterVariation(id),
           ...(options.clips
-            ? { clip: options.clips[fnv1a32(`motion:${id}`) % options.clips.length]! }
+            ? {
+                clip: options.clips[fnv1a32(`motion:${id}`) % options.clips.length]!,
+              }
             : {}),
         },
         bodyBase: new Quaternion(),
