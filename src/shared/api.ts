@@ -1,17 +1,6 @@
 import * as v from "valibot";
-import {
-  apiErrorResponseSchema,
-  createPostResponseSchema,
-  listPostsResponseSchema,
-  serverEventSchema,
-} from "./schemas";
-import type {
-  CreatePostRequest,
-  CreatePostResponse,
-  ListPostsResponse,
-  Post,
-  ServerEvent,
-} from "./types";
+import { apiErrorResponseSchema, createPostResponseSchema, serverEventSchema } from "./schemas";
+import type { CreatePostRequest, CreatePostResponse, Post, ServerEvent } from "./types";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -40,12 +29,6 @@ export const createPost = async (req: CreatePostRequest): Promise<CreatePostResp
   });
   await throwIfError(res);
   return v.parse(createPostResponseSchema, await res.json());
-};
-
-export const listPosts = async (): Promise<ListPostsResponse> => {
-  const res = await fetch("/api/posts");
-  await throwIfError(res);
-  return v.parse(listPostsResponseSchema, await res.json());
 };
 
 export const deletePost = async (id: string, token: string): Promise<void> => {

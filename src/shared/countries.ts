@@ -1,6 +1,4 @@
-import type { Country } from "./types";
-
-export const COUNTRY_NAMES = [
+const COUNTRY_NAMES = [
   "サウナ共和国",
   "推し活連邦",
   "昼寝王国",
@@ -23,11 +21,6 @@ export const COUNTRY_NAMES = [
   "温泉合衆国",
 ] as const;
 
-export const COUNTRIES: readonly Country[] = COUNTRY_NAMES.map((name, id) => ({
-  id,
-  name,
-}));
-
-export const COUNTRY_COUNT = COUNTRIES.length;
+export const COUNTRY_COUNT = COUNTRY_NAMES.length;
 
 export const getCountryName = (countryId: number): string => COUNTRY_NAMES[countryId] ?? "不明の国";

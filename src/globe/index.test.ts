@@ -106,7 +106,6 @@ describe("createGlobe と同じカメラ/projectPin 変換での自転方向 (�
   const CONTAINER_HEIGHT = 593;
 
   const projectToScreen = (
-    rig: GlobeRig,
     camera: PerspectiveCamera,
     pinObject: Object3D,
   ): Readonly<{ x: number; y: number }> => {
@@ -135,7 +134,7 @@ describe("createGlobe と同じカメラ/projectPin 変換での自転方向 (�
     const positions: number[] = [];
     let now = 0;
     for (let i = 0; i < 6; i++) {
-      const { x } = projectToScreen(rig, camera, pinObject);
+      const { x } = projectToScreen(camera, pinObject);
       positions.push(x);
       now += 500;
       rig.tick(0.5, now);

@@ -15,3 +15,5 @@ prototypes/
 # Blender autosaves and the superseded first character prototype
 *.blend1
 /assets/kurita-miive/
+
+docs/superpowers/

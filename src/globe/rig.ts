@@ -9,11 +9,11 @@ export const TILT_DEG = 12;
 export const ROTATION_PERIOD_SEC = 48;
 export const CENTER_DURATION_MS = 700;
 /** これを超えて centerOn 待ちが積み上がった分は、正面合わせをせずその場で即着地させる。 */
-export const MAX_FOCUS_QUEUE = 3;
+const MAX_FOCUS_QUEUE = 3;
 /** キューに後続が残っている間、1 件あたりの centerOn 所要時間をこれまで短縮して追いつく。 */
-export const BACKLOG_DURATION_MS = 500;
+const BACKLOG_DURATION_MS = 500;
 /** ドラッグ/ホイールで許容する tilt の最大絶対値 (度)。北極・南極が見えなくなるほど傾けさせない。 */
-export const MAX_TILT_DEG = 60;
+const MAX_TILT_DEG = 60;
 const MAX_TILT_RAD = (MAX_TILT_DEG * Math.PI) / 180;
 /** 手動操作後、自転再開時に既定の傾きへ戻る速さ (大きいほど速く収束する)。 */
 const TILT_SETTLE_RATE = 3;

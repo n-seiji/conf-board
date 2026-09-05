@@ -1,6 +1,10 @@
 import { SELF } from "cloudflare:test";
+import * as v from "valibot";
 import { describe, expect, it } from "vitest";
-import type { CreatePostResponse, ListPostsResponse, Post, ServerEvent } from "../shared/types";
+import { listPostsResponseSchema } from "../shared/schemas";
+import type { CreatePostResponse, Post, ServerEvent } from "../shared/types";
+
+type ListPostsResponse = v.InferOutput<typeof listPostsResponseSchema>;
 
 const ADMIN_TOKEN = "dev-local-token-123";
 
@@ -300,18 +304,6 @@ describe("POST /api/reset", () => {
     const postRes = await post("R3", "リセット後");
     const data = (await postRes.json()) as CreatePostResponse;
     expect(data.post.seq).toBe(1);
-  });
-});
-
-describe("GET /api/countries", () => {
-  it("20か国を返す", async () => {
-    const res = await SELF.fetch("http://example.com/api/countries");
-    expect(res.status).toBe(200);
-    const countries = (await res.json()) as readonly {
-      id: number;
-      name: string;
-    }[];
-    expect(countries.length).toBe(20);
   });
 });
 

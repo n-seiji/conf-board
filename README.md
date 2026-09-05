@@ -52,6 +52,15 @@ pnpm deploy   # = vite build && wrangler deploy
 | `/display` | ブースのディスプレイ。自転する地球 (Three.js) に投稿がピンとして着地し、吹き出し・QR コード・カウンター (`n / 150`) を表示                                    |
 | `/admin`   | スタッフ用管理画面。トークン入力 (localStorage に保存、`?token=` クエリでも可) → 投稿一覧をライブ表示、行ごとに削除、全体リセット                             |
 
+## モジュール構成 (`src/`)
+
+- `globe/` — Three.js の地球 (回転・ピン・吹き出し・キャラクター・波紋等)
+- `display/` — ディスプレイ画面 (地球ホスト・150 件達成演出・メッセージ球への切り替え)
+- `phone/` — スマホ投稿ページ (フォーム・送信アニメーション・到着画像の生成)
+- `admin/` — 管理画面 (投稿一覧・削除・リセット)
+- `shared/` — API クライアント・スキーマ・定数・localStorage ヘルパー等、複数画面で共有するもの
+- `worker/` — Cloudflare Worker のエントリと投稿を保持する Durable Object (`Board`)
+
 ## API
 
 Worker がすべての `/api/*` を単一インスタンス (`main`) の Durable Object `Board`
@@ -73,7 +82,6 @@ Hibernation API でリアルタイム配信する。
   `snapshot` は完全置換の意味を持つ (受信したらローカル状態を全て `snapshot.posts`
   で置き換える。差分マージしない)。接続直後と再接続直後に届く。`snapshot`・`post`
   の `Post` は `color` を含む。
-- `GET /api/countries` → 20 か国の一覧 (静的)
 - ピンの色 (`src/shared/colors.ts`): `PIN_COLORS` (id 0-5、コーラル/レモン/
   ラベンダー/スカイ/ピーチ/ホワイト)。`isPinColorId()` でバリデーション、
   `pinColorHex()` で表示用の16進カラーを取得する。

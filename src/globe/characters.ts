@@ -18,8 +18,8 @@ const REN: CharacterOptions = {
 };
 
 /** 地表での占有半径 (`spacedPinLatLon` に渡す衝突半径)。 */
-export const GOPHER_OCCUPIED_RADIUS = 0.12;
-export const REN_OCCUPIED_RADIUS = 0.156;
+const GOPHER_OCCUPIED_RADIUS = 0.12;
+const REN_OCCUPIED_RADIUS = 0.156;
 export const occupiedRadiusFor = (ren: boolean): number =>
   ren ? REN_OCCUPIED_RADIUS : GOPHER_OCCUPIED_RADIUS;
 

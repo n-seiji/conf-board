@@ -9,10 +9,16 @@ export const BODY_MAX = 80;
 /** コードポイント単位での文字数 (サロゲートペア絵文字等を1文字として数える)。 */
 export const codePointLength = (value: string): number => Array.from(value).length;
 
+/** コードポイント単位で `max` 文字に切り詰める。 */
+export const clampByCodePoints = (value: string, max: number): string => {
+  const chars = Array.from(value);
+  return chars.length > max ? chars.slice(0, max).join("") : value;
+};
+
 const PIN_COLOR_IDS = PIN_COLORS.map((c) => c.id) as PinColorId[];
 
 /** ピンの色 ID (0-5)。`src/shared/colors.ts` の `PIN_COLORS` から導出する。 */
-export const pinColorIdSchema = v.picklist(PIN_COLOR_IDS, "色の指定が正しくありません");
+const pinColorIdSchema = v.picklist(PIN_COLOR_IDS, "色の指定が正しくありません");
 
 export const postSchema = v.object({
   id: v.string(),
@@ -22,11 +28,6 @@ export const postSchema = v.object({
   color: pinColorIdSchema,
   seq: v.number(),
   createdAt: v.number(),
-});
-
-export const countrySchema = v.object({
-  id: v.number(),
-  name: v.string(),
 });
 
 const nicknameSchema = v.pipe(

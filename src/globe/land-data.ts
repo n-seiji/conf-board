@@ -1,7 +1,7 @@
 import * as topojson from "topojson-client";
 import land110m from "world-atlas/land-110m.json" with { type: "json" };
 
-export type LonLat = readonly [lon: number, lat: number];
+type LonLat = readonly [lon: number, lat: number];
 export type LandRing = readonly LonLat[];
 /** 1 ポリゴン = [外周, 穴1, 穴2, ...] */
 export type LandPolygon = readonly LandRing[];

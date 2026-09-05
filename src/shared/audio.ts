@@ -15,14 +15,6 @@ export class BoardAudio {
     this.context = new Ctor();
   }
 
-  setEnabled(enabled: boolean): void {
-    this.enabled = enabled;
-  }
-
-  isEnabled(): boolean {
-    return this.enabled;
-  }
-
   toggle(): boolean {
     this.enabled = !this.enabled;
     return this.enabled;

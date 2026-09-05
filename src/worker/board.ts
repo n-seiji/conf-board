@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import * as v from "valibot";
 import { DEFAULT_PIN_COLOR_ID, isPinColorId } from "../shared/colors";
+import { CELEBRATION_THRESHOLD } from "../shared/constants";
 import { COUNTRY_COUNT } from "../shared/countries";
 import { createPostRequestSchema } from "../shared/schemas";
 import type { Post, ServerEvent } from "../shared/types";
@@ -15,8 +16,9 @@ type PostRow = Readonly<{
   created_at: number;
 }>;
 
+const POST_COLUMNS = "id, nickname, body, country_id, color, seq, created_at";
+
 const MAX_BODY_BYTES = 4096;
-const CELEBRATION_THRESHOLD = 150;
 
 const rowToPost = (row: PostRow): Post => ({
   id: row.id,
@@ -171,18 +173,12 @@ export class Board extends DurableObject<Env> {
     // クライアントからのメッセージは現状扱わない (受信専用チャンネル)
   }
 
-  override async webSocketClose(
-    ws: WebSocket,
-    code: number,
-    reason: string,
-    wasClean: boolean,
-  ): Promise<void> {
+  override async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
     try {
       ws.close(code, reason);
     } catch {
       // already closed
     }
-    void wasClean;
   }
 
   /** `getWebSockets()` はハイバネート復帰後も Runtime が復元する一覧なので、
@@ -231,10 +227,7 @@ export class Board extends DurableObject<Env> {
     const { nickname, body: text, clientId, color } = result.output;
 
     const existing = this.ctx.storage.sql
-      .exec<PostRow>(
-        "SELECT id, nickname, body, country_id, color, seq, created_at FROM posts WHERE client_id = ?",
-        clientId,
-      )
+      .exec<PostRow>(`SELECT ${POST_COLUMNS} FROM posts WHERE client_id = ?`, clientId)
       .toArray()[0];
     if (existing) {
       const post = rowToPost(existing);
@@ -321,9 +314,7 @@ export class Board extends DurableObject<Env> {
     total: number;
   }> {
     const rows = this.ctx.storage.sql
-      .exec<PostRow>(
-        "SELECT id, nickname, body, country_id, color, seq, created_at FROM posts ORDER BY seq ASC",
-      )
+      .exec<PostRow>(`SELECT ${POST_COLUMNS} FROM posts ORDER BY seq ASC`)
       .toArray();
     return { posts: rows.map(rowToPost), total: rows.length };
   }
@@ -334,30 +325,33 @@ export class Board extends DurableObject<Env> {
   }
 
   /** `transactionSync()` の中でのみ呼ぶ (seq 採番と INSERT を同一トランザクションで確定させる)。 */
-  private nextSeqLocked(): number {
+  private readMeta(key: string): string | null {
     const row = this.ctx.storage.sql
-      .exec<{ value: string | null }>("SELECT value FROM meta WHERE key = ?", "seq")
+      .exec<{ value: string | null }>("SELECT value FROM meta WHERE key = ?", key)
       .toArray()[0];
-    const current = row ? Number(row.value) : 0;
-    const next = current + 1;
+    return row?.value ?? null;
+  }
+
+  private writeMeta(key: string, value: string): void {
     this.ctx.storage.sql.exec(
-      "INSERT INTO meta (key, value) VALUES ('seq', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-      String(next),
+      "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      key,
+      value,
     );
+  }
+
+  private nextSeqLocked(): number {
+    const current = Number(this.readMeta("seq") ?? "0");
+    const next = current + 1;
+    this.writeMeta("seq", String(next));
     return next;
   }
 
   private isCelebrated(): boolean {
-    const row = this.ctx.storage.sql
-      .exec<{ value: string | null }>("SELECT value FROM meta WHERE key = ?", "celebrated")
-      .toArray()[0];
-    return row?.value === "1";
+    return this.readMeta("celebrated") === "1";
   }
 
   private setCelebrated(value: boolean): void {
-    this.ctx.storage.sql.exec(
-      "INSERT INTO meta (key, value) VALUES ('celebrated', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-      value ? "1" : "0",
-    );
+    this.writeMeta("celebrated", value ? "1" : "0");
   }
 }

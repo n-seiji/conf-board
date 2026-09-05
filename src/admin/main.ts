@@ -1,6 +1,7 @@
 import { ApiError, BoardSocket, deletePost, resetBoard } from "../shared/api";
 import { PIN_COLORS } from "../shared/colors";
 import { getCountryName } from "../shared/countries";
+import { readLocalStorage, writeLocalStorage } from "../shared/storage";
 import type { Post } from "../shared/types";
 import "../styles/base.css";
 import "./admin.css";
@@ -16,21 +17,9 @@ const dateFormatter = new Intl.DateTimeFormat("ja-JP", {
   second: "2-digit",
 });
 
-const readStoredToken = (): string => {
-  try {
-    return localStorage.getItem(TOKEN_STORAGE_KEY) ?? "";
-  } catch {
-    return "";
-  }
-};
+const readStoredToken = (): string => readLocalStorage(TOKEN_STORAGE_KEY) ?? "";
 
-const writeStoredToken = (token: string): void => {
-  try {
-    localStorage.setItem(TOKEN_STORAGE_KEY, token);
-  } catch {
-    // localStorage が使えない環境でも致命的ではないため無視する
-  }
-};
+const writeStoredToken = (token: string): void => writeLocalStorage(TOKEN_STORAGE_KEY, token);
 
 const stripTokenFromUrl = (): void => {
   const url = new URL(location.href);
