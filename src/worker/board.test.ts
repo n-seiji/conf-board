@@ -124,27 +124,34 @@ describe("POST /api/posts", () => {
     expect(res.status).toBe(400);
   });
 
-  it("150 件目の投稿で celebrated が true になる", async () => {
-    // 他のテストで作られた投稿の影響を受けないよう、まず reset してから 150 件投稿する。
-    await SELF.fetch("http://example.com/api/reset", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
-    });
+  // 150 回の POST は全体実行 (他ファイルと並列) の負荷下で既定の 5 秒を超えることがある。
+  // タイムアウトすると投稿ループが裏で走り続け、後続テストの total を狂わせるので余裕を持たせる。
+  const CELEBRATION_TEST_TIMEOUT_MS = 60_000;
+  it(
+    "150 件目の投稿で celebrated が true になる",
+    { timeout: CELEBRATION_TEST_TIMEOUT_MS },
+    async () => {
+      // 他のテストで作られた投稿の影響を受けないよう、まず reset してから 150 件投稿する。
+      await SELF.fetch("http://example.com/api/reset", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
+      });
 
-    let lastData: CreatePostResponse | undefined;
-    for (let i = 0; i < 150; i += 1) {
-      const res = await post(`祝${i}`, `本文${i}`);
-      lastData = (await res.json()) as CreatePostResponse;
-      if (i < 149) {
-        expect(lastData.celebrated).toBe(false);
+      let lastData: CreatePostResponse | undefined;
+      for (let i = 0; i < 150; i += 1) {
+        const res = await post(`祝${i}`, `本文${i}`);
+        lastData = (await res.json()) as CreatePostResponse;
+        if (i < 149) {
+          expect(lastData.celebrated).toBe(false);
+        }
       }
-    }
-    expect(lastData?.celebrated).toBe(true);
+      expect(lastData?.celebrated).toBe(true);
 
-    const listRes = await SELF.fetch("http://example.com/api/posts");
-    const list = (await listRes.json()) as ListPostsResponse;
-    expect(list.celebrated).toBe(true);
-  });
+      const listRes = await SELF.fetch("http://example.com/api/posts");
+      const list = (await listRes.json()) as ListPostsResponse;
+      expect(list.celebrated).toBe(true);
+    },
+  );
 
   it("color を省略すると 5 (ホワイト) になる", async () => {
     const res = await post("色なし", "本文");
