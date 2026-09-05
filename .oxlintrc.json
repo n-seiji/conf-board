@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
+  },
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "no-console": "off",
+    "typescript/no-non-null-assertion": "off",
+    "no-await-in-loop": "off",
+    "no-underscore-dangle": "off"
+  },
+  "ignorePatterns": [
+    "worker-configuration.d.ts",
+    "dist",
+    ".wrangler",
+    "node_modules",
+    "pnpm-lock.yaml"
+  ]
+}

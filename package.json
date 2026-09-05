@@ -1,9 +1,8 @@
 {
   "name": "conf-board",
-  "private": true,
   "version": "0.1.0",
+  "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.14.0",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -11,24 +10,12 @@
     "deploy": "pnpm run build && wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check .",
-    "lint:fix": "biome check --write .",
-    "check": "biome check . && tsc --noEmit && vitest run",
-    "gen:regions": "tsx scripts/gen-regions.ts && biome format --write src/globe/regions.json"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
-    "@cloudflare/vite-plugin": "^1.2.3",
-    "@cloudflare/vitest-pool-workers": "^0.22.0",
-    "@fontsource/m-plus-rounded-1c": "^5.1.1",
-    "@types/qrcode": "^1.5.5",
-    "@types/three": "^0.169.0",
-    "@types/topojson-client": "^3.1.5",
-    "tsx": "^4.19.2",
-    "typescript": "^5.6.3",
-    "vite": "^6.0.7",
-    "vitest": "^4.1.0",
-    "wrangler": "^4.4.0"
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "check": "oxlint && oxfmt --check && tsc --noEmit && vitest run",
+    "gen:regions": "tsx scripts/gen-regions.ts && oxfmt src/globe/regions.json",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
   },
   "dependencies": {
     "qrcode": "^1.5.4",
@@ -36,7 +23,26 @@
     "topojson-client": "^3.1.0",
     "world-atlas": "^2.0.2"
   },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.2.3",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@fontsource/m-plus-rounded-1c": "^5.1.1",
+    "@types/qrcode": "^1.5.5",
+    "@types/three": "^0.169.0",
+    "@types/topojson-client": "^3.1.5",
+    "oxfmt": "^0.66.0",
+    "oxlint": "^1.81.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.7",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.4.0"
+  },
+  "packageManager": "pnpm@10.14.0",
   "pnpm": {
-    "onlyBuiltDependencies": ["@biomejs/biome", "esbuild", "workerd"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd"
+    ]
   }
 }

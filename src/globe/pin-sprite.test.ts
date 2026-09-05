@@ -35,7 +35,7 @@ const createMockContext = (): MockCtx => {
     stroke() {
       calls.push(`stroke(strokeStyle=${ctx.strokeStyle},lineWidth=${ctx.lineWidth})`);
     },
-    // biome-ignore lint/suspicious/noExplicitAny: テスト用の最小モックのため CanvasRenderingContext2D 全体は実装しない。
+    // oxlint-disable-next-line typescript/no-explicit-any -- テスト用の最小モックのため CanvasRenderingContext2D 全体は実装しない。
   } as any as MockCtx;
   return ctx;
 };

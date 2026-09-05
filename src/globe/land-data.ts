@@ -12,7 +12,7 @@ export type LandPolygon = readonly LandRing[];
  * テスト (`regions.test.ts`) のいずれからも同じロジックで読み込むための共通化。
  */
 export const loadLandPolygons = (): readonly LandPolygon[] => {
-  // biome-ignore lint/suspicious/noExplicitAny: world-atlas / topojson-client には型定義が無い。
+  // oxlint-disable-next-line typescript/no-explicit-any -- world-atlas / topojson-client には型定義が無い。
   const topology = land110m as any;
   const geo = topojson.feature(topology, topology.objects.land) as unknown as {
     features: readonly { geometry: { type: string; coordinates: unknown } }[];

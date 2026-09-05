@@ -170,7 +170,6 @@ const renderForm = (errorMessage?: string): HTMLElement => {
   const nicknameInput = screenEl.querySelector<HTMLInputElement>("#phone-nickname");
   const bodyTextarea = screenEl.querySelector<HTMLTextAreaElement>("#phone-body");
   const counter = screenEl.querySelector<HTMLSpanElement>(".phone-counter-n");
-  const submitButton = screenEl.querySelector<HTMLButtonElement>(".phone-submit");
   const errorEl = screenEl.querySelector<HTMLParagraphElement>(".phone-error");
   const swatchButtons = screenEl.querySelectorAll<HTMLButtonElement>(".phone-color-swatch");
 

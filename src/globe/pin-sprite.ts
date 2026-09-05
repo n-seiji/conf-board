@@ -20,11 +20,6 @@ const tracePinShape = (ctx: CanvasRenderingContext2D): void => {
     cx + headRadius * Math.cos(rightAngle),
     headCenterY + headRadius * Math.sin(rightAngle),
   ];
-  const leftPoint: readonly [number, number] = [
-    cx + headRadius * Math.cos(leftAngle),
-    headCenterY + headRadius * Math.sin(leftAngle),
-  ];
-
   ctx.beginPath();
   ctx.moveTo(cx, tipY);
   ctx.lineTo(rightPoint[0], rightPoint[1]);
