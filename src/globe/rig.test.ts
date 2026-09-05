@@ -1,6 +1,6 @@
 import { Mesh, MeshBasicMaterial, SphereGeometry } from "three";
 import { describe, expect, it } from "vitest";
-import { GlobeRig, latLonToVector3, opacityForDot, pinSpriteRotation } from "./rig";
+import { GlobeRig, latLonToVector3 } from "./rig";
 
 const BACKSIDE_DOT_THRESHOLD = 0.15;
 
@@ -270,66 +270,5 @@ describe("GlobeRig.focusPin: 連続到着時のキューイング (取りこぼ�
     expect(arrivedOrder).toEqual(["a", "b"]); // まだ 900ms 経っていない
     rig.tick(0.001, 900 + 500 + 900);
     expect(arrivedOrder).toEqual(["a", "b", "c"]);
-  });
-});
-
-describe("opacityForDot: ピン Sprite の limb 付近フェード (はみ出し回帰テスト)", () => {
-  it("正面 (dot が十分大きい) では完全に不透明", () => {
-    expect(opacityForDot(1)).toBe(1);
-    expect(opacityForDot(0.35)).toBe(1);
-  });
-
-  it("limb 付近 (dot が低い) では完全に透明になる", () => {
-    expect(opacityForDot(0.2)).toBe(0);
-    expect(opacityForDot(0.1)).toBe(0);
-    expect(opacityForDot(-0.5)).toBe(0);
-  });
-
-  it("フェード区間の中間では 0 と 1 の間の値になる (突然消えない)", () => {
-    const mid = opacityForDot(0.275); // 0.35 と 0.2 のちょうど中間
-    expect(mid).toBeGreaterThan(0);
-    expect(mid).toBeLessThan(1);
-    expect(mid).toBeCloseTo(0.5, 5);
-  });
-});
-
-describe("pinSpriteRotation: ピン Sprite を球面法線に垂直に立たせる回転 (垂直立て回帰テスト)", () => {
-  it("法線が真上 (0,1) の場合、回転なし (直立) になる", () => {
-    expect(pinSpriteRotation(0, 1)).toBeCloseTo(0, 10);
-  });
-
-  it("法線が右 (1,0) の場合、上方向が +x を向くよう -π/2 回転する", () => {
-    expect(pinSpriteRotation(1, 0)).toBeCloseTo(-Math.PI / 2, 10);
-  });
-
-  it("法線が左 (-1,0) の場合、上方向が -x を向くよう +π/2 回転する", () => {
-    expect(pinSpriteRotation(-1, 0)).toBeCloseTo(Math.PI / 2, 10);
-  });
-
-  it("法線が真下 (0,-1) の場合、回転量の絶対値が π になる", () => {
-    expect(Math.abs(pinSpriteRotation(0, -1))).toBeCloseTo(Math.PI, 10);
-  });
-
-  it("法線がほぼ 0 (中央、真正面向き) の場合、回転なしになる", () => {
-    expect(pinSpriteRotation(0, 0)).toBe(0);
-  });
-
-  it("任意の法線について、回転後の上方向ベクトルが法線と同じ向きに揃う", () => {
-    const samples: ReadonlyArray<readonly [number, number]> = [
-      [0.3, 0.7],
-      [-0.6, 0.2],
-      [0.9, -0.1],
-      [-0.4, -0.5],
-      [0.05, -0.99],
-    ];
-    for (const [nx, ny] of samples) {
-      const r = pinSpriteRotation(nx, ny);
-      const upX = -Math.sin(r);
-      const upY = Math.cos(r);
-      const dot = upX * nx + upY * ny;
-      const normalLen = Math.hypot(nx, ny);
-      // 単位ベクトル同士の内積が 1 に近い = ほぼ同じ向き。
-      expect(dot / normalLen).toBeCloseTo(1, 5);
-    }
   });
 });

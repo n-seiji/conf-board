@@ -41,43 +41,6 @@ const normalizeAngleDelta = (delta: number): number => {
 
 const easeOutCubic = (t: number): number => 1 - (1 - t) ** 3;
 
-/** ピン Sprite のフェードを開始する dot (これ以上なら不透明)。 */
-export const PIN_FADE_START_DOT = 0.35;
-/** ピン Sprite が完全に透明になる dot。 */
-export const PIN_FADE_END_DOT = 0.2;
-
-/**
- * dot (法線とカメラ方向の内積) からピンの不透明度 (0〜1) を求める。
- * ビルボード Sprite は球面の丸みに追従しないため、真の裏側になるより手前
- * (limb 付近) から早めにフェードさせないと、球の輪郭からはみ出して浮いて見える。
- * `fadeStartDot` 以上で 1、`fadeEndDot` 以下で 0、間は線形補間する。
- */
-export const opacityForDot = (
-  dot: number,
-  fadeStartDot: number = PIN_FADE_START_DOT,
-  fadeEndDot: number = PIN_FADE_END_DOT,
-): number => {
-  if (dot >= fadeStartDot) return 1;
-  if (dot <= fadeEndDot) return 0;
-  return (dot - fadeEndDot) / (fadeStartDot - fadeEndDot);
-};
-
-/**
- * 法線ベクトルの画面投影 (normalX, normalY) から、マップピン Sprite を球面に垂直に
- * 立たせるための SpriteMaterial.rotation (ラジアン) を求める。
- * カメラは (0,0,5) から原点を見る固定姿勢のため、world の x/y はそのまま画面の右/上に対応する。
- * three.js の Sprite は rotation が正で反時計回りに回転し、回転後の上方向ベクトルは
- * (-sin r, cos r) になる。これを法線の投影方向に一致させると r = atan2(-normalX, normalY)。
- * 投影がほぼ 0 (中央、法線がほぼ +z 向き) の場合は直立 (0) を返す。
- */
-const PIN_ROTATION_EPSILON = 1e-6;
-export const pinSpriteRotation = (normalX: number, normalY: number): number => {
-  if (Math.abs(normalX) < PIN_ROTATION_EPSILON && Math.abs(normalY) < PIN_ROTATION_EPSILON) {
-    return 0;
-  }
-  return Math.atan2(-normalX, normalY);
-};
-
 type FocusAnimation = Readonly<{
   pinId: string;
   fromY: number;

@@ -1,7 +1,9 @@
 import {
   AdditiveBlending,
   Color,
+  DirectionalLight,
   DoubleSide,
+  HemisphereLight,
   Mesh,
   MeshBasicMaterial,
   type Object3D,
@@ -9,23 +11,14 @@ import {
   RingGeometry,
   Scene,
   SphereGeometry,
-  Sprite,
-  type SpriteMaterial,
   Vector3,
   WebGLRenderer,
 } from "three";
 import { pinColorHex } from "../shared/colors";
 import type { Post } from "../shared/types";
-import { createPinSprite } from "./pin-sprite";
+import { createPinObject, orientPinToNormal } from "./pin-mesh";
 import { pinLatLon } from "./pins";
-import {
-  DEFAULT_FOCUS_DURATION_MS,
-  GlobeRig,
-  TILT_DEG,
-  latLonToVector3,
-  opacityForDot,
-  pinSpriteRotation,
-} from "./rig";
+import { DEFAULT_FOCUS_DURATION_MS, GlobeRig, TILT_DEG, latLonToVector3 } from "./rig";
 import { createWorldTexture } from "./world-texture";
 
 export { latLonToVector3, TILT_DEG, frontFacingAngle } from "./rig";
@@ -48,8 +41,8 @@ const LANDING_DURATION_MS = 400;
  * 法線とカメラ方向の内積がこれ未満なら裏側とみなし非表示にする (吹き出し・リーダー線用)。
  * 仕様上の裏側判定は 0.05 (ほぼ真横) だが、その値では球の縁 (limb) 付近で
  * dot が閾値をまたいで前後するフレームが生じ、吹き出し・線が高頻度でちらつく。
- * 0.15 まで早めに切ることでちらつきを抑える (ピン Sprite 自体のフェードは
- * 別途 `opacityForDot` で 0.35〜0.2 のより広い範囲で滑らかに行う)。
+ * 0.15 まで早めに切ることでちらつきを抑える。ピン自体は 3D メッシュのため球の
+ * depth buffer に自然に隠れ、この閾値は吹き出し・リーダー線の表示判定にのみ影響する。
  */
 const BACKSIDE_DOT_THRESHOLD = 0.15;
 
@@ -136,15 +129,10 @@ const createRippleMeshes = (): readonly [Mesh, Mesh] => {
   return [makeRing(1), makeRing(0.6)];
 };
 
-/** ピン (Sprite) or 波紋 (Mesh) の opacity を持つマテリアルを取り出す。 */
-/** ピン (常に Sprite) から opacity を持つマテリアルを取り出す。 */
-const spriteMaterial = (object: Object3D): SpriteMaterial | null =>
-  object instanceof Sprite ? object.material : null;
-
 /**
  * 地球モジュール。ディスプレイ画面とスマホ到着画面で共用する。
  * シーングラフと回転の数学は `GlobeRig` (WebGL 無しでテスト可能) に切り出し、ここでは
- * 実際の Three.js レンダリング (テクスチャ・ピン Sprite・波紋・カメラ) と結びつけるだけにする。
+ * 実際の Three.js レンダリング (テクスチャ・ピン Mesh・波紋・カメラ) と結びつけるだけにする。
  */
 export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}): GlobeHandle => {
   const scene = new Scene();
@@ -168,6 +156,12 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
   const sphereMesh = new Mesh(sphereGeometry, sphereMaterial);
   rig.spinGroup.add(sphereMesh);
 
+  // ピンを 3D メッシュ化したことで陰影が付くようにする (球自体は MeshBasicMaterial なので見た目は変わらない)。
+  const hemisphereLight = new HemisphereLight("#ffffff", "#c8f0dc", 1.2);
+  const directionalLight = new DirectionalLight("#ffffff", 1.0);
+  directionalLight.position.set(2, 3, 4);
+  scene.add(hemisphereLight, directionalLight);
+
   const pinMeta = new Map<string, PinMeta>();
   const pinOrder: string[] = [];
   const frameCallbacks = new Set<(elapsedSec: number) => void>();
@@ -188,12 +182,9 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
 
   const removePinInternal = (id: string): void => {
     const meta = pinMeta.get(id);
-    const object = rig.removePin(id);
-    if (object instanceof Sprite) {
-      // ピンは常に Sprite。テクスチャは色ごとにキャッシュ共有しているため dispose せず、
-      // マテリアル (色ごとに毎回新規作成している) だけ dispose する。
-      object.material.dispose();
-    }
+    // ピンのジオメトリ・マテリアルは colorId ごとに共有しているため dispose しない
+    // (rig.removePin が pinsGroup から remove するだけで十分)。
+    rig.removePin(id);
     if (meta?.ripple) {
       for (const m of meta.ripple.meshes) {
         rig.pinsGroup.remove(m);
@@ -206,8 +197,8 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     if (idx >= 0) pinOrder.splice(idx, 1);
   };
 
-  const setPinDistance = (sprite: Sprite, dir: Vector3, distance: number): void => {
-    sprite.position.copy(dir).multiplyScalar(distance);
+  const setPinDistance = (object: Object3D, dir: Vector3, distance: number): void => {
+    object.position.copy(dir).multiplyScalar(distance);
   };
 
   const addPin = (
@@ -219,11 +210,12 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     const dir = latLonToVector3(lat, lon, 1);
     const willAnimate = addOptions.animate ?? true;
 
-    const sprite = createPinSprite(post.color, pinColorHex(post.color));
+    const object = createPinObject(post.color, pinColorHex(post.color));
+    orientPinToNormal(object, dir);
     const restDistance = SPHERE_RADIUS;
-    setPinDistance(sprite, dir, restDistance + (willAnimate ? LANDING_START_EXTRA : 0));
+    setPinDistance(object, dir, restDistance + (willAnimate ? LANDING_START_EXTRA : 0));
 
-    rig.addPin(post.id, sprite, dir);
+    rig.addPin(post.id, object, dir);
     pinMeta.set(post.id, { ripple: null, landing: null });
     pinOrder.push(post.id);
     while (pinOrder.length > MAX_PIN_MESHES) {
@@ -278,7 +270,7 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     for (const [id, meta] of pinMeta) {
       if (!meta.landing) continue;
       const pin = rig.getPin(id);
-      if (!pin || !(pin.object instanceof Sprite)) {
+      if (!pin) {
         meta.landing = null;
         continue;
       }
@@ -325,20 +317,6 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     }
   };
 
-  const updatePinFadeAndOrientation = (): void => {
-    for (const id of pinMeta.keys()) {
-      // visible の閾値はここでは使わない (dot をそのままフェードに使うため 0 を渡す)。
-      const projected = rig.projectPin(id, 0);
-      const pin = rig.getPin(id);
-      if (!projected || !pin) continue;
-      const material = spriteMaterial(pin.object);
-      if (!material) continue;
-      material.opacity = opacityForDot(projected.dot);
-      // 球が回転するたびに法線の向きが変わるため、フェードと合わせて毎フレーム更新する。
-      material.rotation = pinSpriteRotation(projected.normal.x, projected.normal.y);
-    }
-  };
-
   const clock = { last: performance.now() };
   let rafId = 0;
   const tick = (): void => {
@@ -346,12 +324,11 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     const dt = (now - clock.last) / 1000;
     clock.last = now;
 
-    // rig.tick は内部で updateMatrixWorld まで済ませるため、この後の updatePinFadeAndOrientation や
+    // rig.tick は内部で updateMatrixWorld まで済ませるため、この後の
     // (focus 完了時に呼ばれる) onArrived コールバック内の projectPin も常に最新の位置を読める。
     rig.tick(dt, now);
     updateLanding(now);
     updateRipples(now);
-    updatePinFadeAndOrientation();
     renderer.render(scene, camera);
 
     for (const cb of frameCallbacks) cb(now / 1000);
@@ -392,6 +369,7 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     sphereGeometry.dispose();
     sphereMaterial.map?.dispose();
     sphereMaterial.dispose();
+    scene.remove(hemisphereLight, directionalLight);
     renderer.dispose();
     if (renderer.domElement.parentElement === container) {
       container.removeChild(renderer.domElement);
