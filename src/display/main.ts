@@ -1,28 +1,20 @@
 import QRCode from "qrcode";
-import { createConfetti } from "./confetti";
+import { createCelebration } from "./celebration";
 import { MilestoneState } from "./milestone";
-import { BoardAudio } from "../globe/audio";
+import { BoardAudio } from "../shared/audio";
 import { createCallouts } from "../globe/callouts";
 import { MAX_PIN_MESHES, createGlobe } from "../globe/index";
 import { BoardSocket } from "../shared/api";
+import { CELEBRATION_THRESHOLD } from "../shared/constants";
 import { getCountryName } from "../shared/countries";
 import type { Post } from "../shared/types";
 import "../styles/base.css";
 import "./display.css";
 
-const TARGET_POSTS = 150;
 const TOAST_DURATION_MS = 3000;
 
 const soundOnIcon = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M19 6a9 9 0 0 1 0 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
 const soundOffIcon = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
-
-const sparkleStar = (): SVGSVGElement => {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.innerHTML =
-    '<path d="M12 0 L14.5 9.5 L24 12 L14.5 14.5 L12 24 L9.5 14.5 L0 12 L9.5 9.5 Z" fill="currentColor"/>';
-  return svg;
-};
 
 const buildDom = (
   root: HTMLElement,
@@ -75,7 +67,7 @@ const buildDom = (
   const counter = document.createElement("div");
   counter.className = "display-counter";
   counter.innerHTML = `
-    <div class="display-counter__value"><span class="counter-n">0</span><span class="display-counter__total"> / ${TARGET_POSTS}</span></div>
+    <div class="display-counter__value"><span class="counter-n">0</span><span class="display-counter__total"> / ${CELEBRATION_THRESHOLD}</span></div>
     <div class="display-counter__label">世界を満たした願い</div>
     <div class="display-counter__brand">miive</div>
   `;
@@ -224,44 +216,15 @@ const main = (): void => {
     }, TOAST_DURATION_MS);
   };
 
-  const spawnSparkles = (): void => {
-    // 球の半径 (実測) に合わせて配置する (固定値だと球のサイズが変わったときにずれるため)。
-    const radius = globe.getBounds().width / 2;
-    for (let i = 0; i < 6; i++) {
-      const el = sparkleStar();
-      el.setAttribute("class", "display-sparkle");
-      const angle = (i / 6) * Math.PI * 2;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
-      el.style.left = `calc(50% + ${x}px)`;
-      el.style.top = `calc(50% + ${y}px)`;
-      el.style.animationDelay = `${i * 60}ms`;
-      dom.sparklesHost.appendChild(el);
-      setTimeout(() => el.remove(), 1400);
-    }
-  };
-
-  const spawnBigRipples = (): void => {
-    for (let i = 0; i < 2; i++) {
-      const ring = document.createElement("div");
-      ring.className = "display-ripple-big";
-      ring.style.animationDelay = `${i * 150}ms`;
-      dom.sparklesHost.appendChild(ring);
-      setTimeout(() => ring.remove(), 1400);
-    }
-  };
-
-  const confetti = createConfetti(dom.sparklesHost);
+  const celebration = createCelebration(
+    dom.globeWrap,
+    dom.sparklesHost,
+    () => globe.getBounds().width / 2,
+  );
   const celebrate = (): void => {
     milestone.celebrate(performance.now());
-    confetti.play();
-    dom.globeWrap.classList.remove("globe-wrap--celebrate");
-    // reflow してアニメーションを再トリガーできるようにする。
-    void dom.globeWrap.offsetWidth;
-    dom.globeWrap.classList.add("globe-wrap--celebrate");
-    spawnBigRipples();
-    spawnSparkles();
-    showToast("150の願いで世界が満たされました!");
+    celebration.play();
+    showToast(`${CELEBRATION_THRESHOLD}の願いで世界が満たされました!`);
   };
 
   let knownIds = new Set<string>();
@@ -334,7 +297,7 @@ const main = (): void => {
       setCounter(total);
     },
     onReset: () => {
-      confetti.dispose();
+      celebration.dispose();
       globe.clear();
       callouts.clearAll();
       knownIds = new Set();
@@ -347,7 +310,7 @@ const main = (): void => {
 
   window.addEventListener("beforeunload", () => {
     headingObserver.disconnect();
-    confetti.dispose();
+    celebration.dispose();
     socket.close();
     callouts.dispose();
     globe.dispose();
