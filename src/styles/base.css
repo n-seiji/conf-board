@@ -1,0 +1,57 @@
+@import "@fontsource/m-plus-rounded-1c/800.css";
+@import "@fontsource/m-plus-rounded-1c/900.css";
+@import "./tokens.css";
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-display);
+  font-weight: 800;
+  background: linear-gradient(180deg, var(--mint) 0%, var(--mint-deep) 100%);
+  color: var(--white);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  cursor: pointer;
+}
+
+input,
+textarea {
+  font-family: inherit;
+}
+
+.placeholder-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
+}
+
+.placeholder-screen h1 {
+  font-size: 28px;
+  font-weight: 900;
+  margin: 0;
+}
+
+.placeholder-screen p {
+  font-size: 14px;
+  font-weight: 800;
+  opacity: 0.8;
+  margin: 0;
+}

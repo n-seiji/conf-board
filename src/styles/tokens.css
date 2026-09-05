@@ -1,0 +1,21 @@
+:root {
+  --mint: #5fcfbf;
+  --mint-deep: #3fb3a3;
+  --mint-light: #7fd9cc;
+  --white: #ffffff;
+  --white-90: rgba(255, 255, 255, 0.9);
+  --white-45: rgba(255, 255, 255, 0.45);
+  --white-25: rgba(255, 255, 255, 0.25);
+  --white-12: rgba(255, 255, 255, 0.12);
+  --ink: #1f3a36;
+  --danger: #e5735f;
+  --danger-ink: #c0392b;
+  --warning: #ffe08a;
+
+  --font-display: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", sans-serif;
+
+  --radius-card: 24px;
+  --radius-button: 999px;
+
+  --shadow-soft: 0 10px 24px rgba(31, 58, 54, 0.12);
+}

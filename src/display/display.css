@@ -1,0 +1,335 @@
+.display-screen {
+  position: relative;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, var(--mint-light) 0%, var(--mint-deep) 75%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.display-stage {
+  position: relative;
+  width: min(100vw, 177.78dvh);
+  height: min(100dvh, 56.25vw);
+  overflow: hidden;
+}
+
+.globe-area {
+  position: absolute;
+  top: 140px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.globe-wrap {
+  position: relative;
+  height: 78%;
+  aspect-ratio: 1 / 1;
+}
+
+.globe-wrap--celebrate {
+  animation: globe-pulse 600ms ease;
+}
+
+@keyframes globe-pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.callouts-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.callout-leader-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.callout-leader {
+  fill: none;
+  stroke: var(--white-90);
+  stroke-width: 2px;
+  transition: opacity 200ms ease;
+}
+
+.callout-leader--latest {
+  stroke-width: 3px;
+}
+
+.callout-leader--hidden {
+  opacity: 0;
+}
+
+.callout-card {
+  position: absolute;
+  max-width: 320px;
+  background: var(--white);
+  color: var(--ink);
+  border-radius: 20px;
+  box-shadow: var(--shadow-soft);
+  padding: 14px 18px 14px 24px;
+  transition: opacity 200ms ease;
+  opacity: 1;
+  overflow: hidden;
+}
+
+/*
+ * 最新1件は「実寸」で拡大する (幅1.15倍・font-size1.1倍)。transform: scale だと
+ * レイアウト計算 (offsetWidth/offsetHeight) には反映されず、実際の見た目だけ拡大されて
+ * 隣のカードと重なってしまうため使わない。
+ */
+.callout-card--latest {
+  max-width: calc(320px * 1.15);
+}
+
+.callout-card--latest .callout-card__nickname {
+  font-size: calc(13px * 1.1);
+}
+
+.callout-card--latest .callout-card__body {
+  font-size: calc(17px * 1.1);
+}
+
+.callout-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: var(--callout-accent, var(--mint-deep));
+}
+
+.callout-card--hidden {
+  opacity: 0;
+}
+
+.callout-card--fade-out {
+  opacity: 0;
+}
+
+.callout-card__nickname {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--mint-deep);
+  margin-bottom: 4px;
+}
+
+.callout-card__body {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.display-heading {
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  z-index: 3;
+}
+
+.display-heading__sub {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--white);
+  opacity: 0.8;
+  margin: 0 0 6px;
+}
+
+.display-heading__main {
+  font-size: 30px;
+  font-weight: 900;
+  color: var(--white);
+  margin: 0;
+}
+
+.display-toast {
+  position: absolute;
+  top: 150px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--white);
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 900;
+  padding: 12px 28px;
+  border-radius: 24px;
+  box-shadow: var(--shadow-soft);
+  opacity: 0;
+  transition: opacity 300ms ease;
+  z-index: 4;
+  max-width: 60%;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.display-toast--visible {
+  opacity: 1;
+}
+
+.display-counter {
+  position: absolute;
+  left: 56px;
+  bottom: 56px;
+  z-index: 3;
+  color: var(--white);
+}
+
+.display-counter__value {
+  font-size: 56px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.display-counter__total {
+  font-size: 24px;
+  font-weight: 800;
+  opacity: 0.7;
+}
+
+.display-counter__label {
+  font-size: 15px;
+  font-weight: 800;
+  opacity: 0.85;
+  margin-top: 4px;
+}
+
+.display-counter__brand {
+  font-size: 13px;
+  font-weight: 800;
+  opacity: 0.6;
+  margin-top: 12px;
+}
+
+.display-qr {
+  position: absolute;
+  right: 56px;
+  bottom: 56px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.display-qr__box {
+  background: var(--white);
+  border-radius: 16px;
+  padding: 10px;
+  box-shadow: var(--shadow-soft);
+  line-height: 0;
+}
+
+.display-qr__box img {
+  display: block;
+  width: 120px;
+  height: 120px;
+}
+
+.display-qr__label {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--white);
+}
+
+.display-sound-toggle {
+  /* QR ボックス (right:56px, 幅140px) の左、画像部分と高さが揃うあたりに配置する。 */
+  position: absolute;
+  right: 212px;
+  bottom: 134px;
+  z-index: 5;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--white-25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--white);
+}
+
+.display-sound-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+
+.display-sparkles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.display-sparkle {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  color: var(--white);
+  opacity: 0;
+  animation: sparkle-pop 1200ms ease forwards;
+}
+
+@keyframes sparkle-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.2) rotate(0deg);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.1) rotate(20deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.6) rotate(40deg);
+  }
+}
+
+.display-ripple-big {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border: 3px solid var(--white-90);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0.2);
+  opacity: 1;
+  pointer-events: none;
+  z-index: 4;
+  animation: ripple-expand 1000ms ease-out forwards;
+}
+
+@keyframes ripple-expand {
+  0% {
+    width: 40px;
+    height: 40px;
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  100% {
+    width: 900px;
+    height: 900px;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
