@@ -1,15 +1,20 @@
+import * as v from "valibot";
 import { BoardAudio } from "../globe/audio";
 import { type GlobeHandle, createGlobe } from "../globe/index";
 import { pinLatLon } from "../globe/pins";
 import { ApiError, createPost } from "../shared/api";
 import { DEFAULT_PIN_COLOR_ID, PIN_COLORS, type PinColorId, isPinColorId } from "../shared/colors";
 import { getCountryName } from "../shared/countries";
+import {
+  BODY_MAX,
+  NICKNAME_MAX,
+  codePointLength,
+  createPostRequestSchema,
+} from "../shared/schemas";
 import type { Post } from "../shared/types";
 import "../styles/base.css";
 import "./phone.css";
 
-const NICKNAME_MAX = 20;
-const BODY_MAX = 80;
 const LAUNCH_DURATION_MS = 900;
 const COLOR_STORAGE_KEY = "miive:phone:color";
 
@@ -58,8 +63,7 @@ let lastForm: FormState = { nickname: "", body: "" };
 let selectedColor: PinColorId = loadStoredColor();
 let lastPost: Post | null = null;
 let arrivedGlobe: GlobeHandle | null = null;
-
-const codePointLength = (value: string): number => Array.from(value).length;
+let pendingClientId = "";
 
 const clampByCodePoints = (value: string, max: number): string => {
   const chars = Array.from(value);
@@ -205,19 +209,21 @@ const renderForm = (errorMessage?: string): HTMLElement => {
     event.preventDefault();
     const nicknameRaw = nicknameInput?.value ?? "";
     const bodyRaw = bodyTextarea?.value ?? "";
-    const nickname = nicknameRaw.trim();
-    const body = bodyRaw.trim();
     lastForm = { nickname: nicknameRaw, body: bodyRaw };
 
-    if (codePointLength(nickname) < 1 || codePointLength(nickname) > NICKNAME_MAX) {
-      showFormWithError("ニックネームを入力してください");
+    const clientId = crypto.randomUUID();
+    const result = v.safeParse(createPostRequestSchema, {
+      nickname: nicknameRaw,
+      body: bodyRaw,
+      clientId,
+      color: selectedColor,
+    });
+    if (!result.success) {
+      showFormWithError(result.issues[0]?.message ?? "入力内容を確認してください");
       return;
     }
-    if (codePointLength(body) < 1 || codePointLength(body) > BODY_MAX) {
-      showFormWithError("内容を入力してください");
-      return;
-    }
-    lastForm = { nickname, body };
+    pendingClientId = clientId;
+    lastForm = { nickname: result.output.nickname, body: result.output.body };
     goTo("sending");
   });
 
@@ -257,7 +263,7 @@ const renderSending = (): HTMLElement => {
   const colorHex = PIN_COLORS[selectedColor].hex;
   if (colorBand) colorBand.style.backgroundColor = colorHex;
 
-  const clientId = crypto.randomUUID();
+  const clientId = pendingClientId;
 
   const animationDone = new Promise<void>((resolve) => {
     requestAnimationFrame(() => {

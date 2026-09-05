@@ -1,6 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
+import * as v from "valibot";
 import { DEFAULT_PIN_COLOR_ID, isPinColorId } from "../shared/colors";
 import { COUNTRY_COUNT } from "../shared/countries";
+import { createPostRequestSchema } from "../shared/schemas";
 import type { Post, ServerEvent } from "../shared/types";
 
 type PostRow = Readonly<{
@@ -13,8 +15,6 @@ type PostRow = Readonly<{
   created_at: number;
 }>;
 
-const NICKNAME_MAX = 20;
-const BODY_MAX = 80;
 const MAX_BODY_BYTES = 4096;
 const CELEBRATION_THRESHOLD = 150;
 
@@ -37,13 +37,6 @@ const jsonResponse = (data: unknown, status = 200): Response =>
 
 const errorResponse = (status: number, message: string): Response =>
   jsonResponse({ error: message }, status);
-
-/** コードポイント単位での文字数 (サロゲートペア絵文字等を1文字として数える)。 */
-const codePointLength = (value: string): number => Array.from(value).length;
-
-const isUuidLike = (value: unknown): value is string =>
-  typeof value === "string" &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
 /**
  * 定数時間での文字列比較。SHA-256 で両者を等長のダイジェストにしてから
@@ -231,35 +224,16 @@ export class Board extends DurableObject<Env> {
       return errorResponse(400, "Invalid body");
     }
 
-    const rawNickname = "nickname" in body ? (body as { nickname: unknown }).nickname : undefined;
-    const rawBody = "body" in body ? (body as { body: unknown }).body : undefined;
-    const rawClientId = "clientId" in body ? (body as { clientId: unknown }).clientId : undefined;
-    const rawColor = "color" in body ? (body as { color: unknown }).color : undefined;
-
-    if (typeof rawNickname !== "string" || typeof rawBody !== "string") {
-      return errorResponse(400, "nickname and body are required strings");
+    const result = v.safeParse(createPostRequestSchema, body);
+    if (!result.success) {
+      return errorResponse(400, result.issues[0]?.message ?? "Invalid body");
     }
-    if (!isUuidLike(rawClientId)) {
-      return errorResponse(400, "clientId is required and must be a UUID");
-    }
-    if (rawColor !== undefined && !isPinColorId(rawColor)) {
-      return errorResponse(400, "color must be an integer between 0 and 5");
-    }
-    const color = rawColor === undefined ? DEFAULT_PIN_COLOR_ID : rawColor;
-
-    const nickname = rawNickname.trim();
-    const text = rawBody.trim();
-    if (codePointLength(nickname) < 1 || codePointLength(nickname) > NICKNAME_MAX) {
-      return errorResponse(400, `nickname must be 1-${NICKNAME_MAX} characters`);
-    }
-    if (codePointLength(text) < 1 || codePointLength(text) > BODY_MAX) {
-      return errorResponse(400, `body must be 1-${BODY_MAX} characters`);
-    }
+    const { nickname, body: text, clientId, color } = result.output;
 
     const existing = this.ctx.storage.sql
       .exec<PostRow>(
         "SELECT id, nickname, body, country_id, color, seq, created_at FROM posts WHERE client_id = ?",
-        rawClientId,
+        clientId,
       )
       .toArray()[0];
     if (existing) {
@@ -277,7 +251,7 @@ export class Board extends DurableObject<Env> {
       this.ctx.storage.sql.exec(
         "INSERT INTO posts (id, client_id, nickname, body, country_id, color, seq, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         id,
-        rawClientId,
+        clientId,
         nickname,
         text,
         countryId,

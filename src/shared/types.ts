@@ -1,28 +1,17 @@
-import type { PinColorId } from "./colors";
+import type * as v from "valibot";
+import type {
+  apiErrorResponseSchema,
+  countrySchema,
+  createPostRequestSchema,
+  postSchema,
+} from "./schemas";
 
-export type Post = Readonly<{
-  id: string;
-  nickname: string;
-  body: string;
-  countryId: number;
-  color: PinColorId;
-  seq: number;
-  createdAt: number;
-}>;
+export type Post = Readonly<v.InferOutput<typeof postSchema>>;
 
-export type Country = Readonly<{
-  id: number;
-  name: string;
-}>;
+export type Country = Readonly<v.InferOutput<typeof countrySchema>>;
 
-export type CreatePostRequest = Readonly<{
-  nickname: string;
-  body: string;
-  /** クライアントが送信ごとに生成する UUID。再送時の冪等化に使う。 */
-  clientId: string;
-  /** 省略時は 5 (ホワイト)。 */
-  color?: PinColorId;
-}>;
+/** クライアントが送信するリクエストの入力型 (color は省略可能)。 */
+export type CreatePostRequest = Readonly<v.InferInput<typeof createPostRequestSchema>>;
 
 export type CreatePostResponse = Readonly<{
   post: Post;
@@ -36,9 +25,7 @@ export type ListPostsResponse = Readonly<{
   celebrated: boolean;
 }>;
 
-export type ApiErrorResponse = Readonly<{
-  error: string;
-}>;
+export type ApiErrorResponse = Readonly<v.InferOutput<typeof apiErrorResponseSchema>>;
 
 export type ServerEvent =
   | Readonly<{

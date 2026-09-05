@@ -1,3 +1,10 @@
+import * as v from "valibot";
+import {
+  apiErrorResponseSchema,
+  createPostResponseSchema,
+  listPostsResponseSchema,
+  serverEventSchema,
+} from "./schemas";
 import type {
   CreatePostRequest,
   CreatePostResponse,
@@ -19,17 +26,10 @@ export class ApiError extends Error {
 /** レスポンスが失敗 (`!res.ok`) の場合、body の `{error}` を読み取って `ApiError` を投げる。 */
 const throwIfError = async (res: Response): Promise<void> => {
   if (res.ok) return;
-  const body: unknown = await res.json().catch(() => ({ error: res.statusText }));
-  const message =
-    typeof body === "object" && body !== null && "error" in body
-      ? String((body as { error: unknown }).error)
-      : res.statusText;
+  const rawBody: unknown = await res.json().catch(() => undefined);
+  const parsed = v.safeParse(apiErrorResponseSchema, rawBody);
+  const message = parsed.success ? parsed.output.error : res.statusText;
   throw new ApiError(res.status, message);
-};
-
-const parseJson = async <T>(res: Response): Promise<T> => {
-  await throwIfError(res);
-  return (await res.json()) as T;
 };
 
 export const createPost = async (req: CreatePostRequest): Promise<CreatePostResponse> => {
@@ -38,12 +38,14 @@ export const createPost = async (req: CreatePostRequest): Promise<CreatePostResp
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
   });
-  return parseJson<CreatePostResponse>(res);
+  await throwIfError(res);
+  return v.parse(createPostResponseSchema, await res.json());
 };
 
 export const listPosts = async (): Promise<ListPostsResponse> => {
   const res = await fetch("/api/posts");
-  return parseJson<ListPostsResponse>(res);
+  await throwIfError(res);
+  return v.parse(listPostsResponseSchema, await res.json());
 };
 
 export const deletePost = async (id: string, token: string): Promise<void> => {
@@ -128,12 +130,15 @@ export class BoardSocket {
 
   private handleMessage(data: unknown): void {
     if (typeof data !== "string") return;
-    let event: ServerEvent;
+    let rawEvent: unknown;
     try {
-      event = JSON.parse(data) as ServerEvent;
+      rawEvent = JSON.parse(data);
     } catch {
       return;
     }
+    const parsed = v.safeParse(serverEventSchema, rawEvent);
+    if (!parsed.success) return;
+    const event: ServerEvent = parsed.output;
     switch (event.type) {
       case "snapshot":
         this.handlers.onSnapshot?.(event.posts, event.total, event.celebrated);
