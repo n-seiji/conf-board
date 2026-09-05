@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { type Rect, buildLeaderPath, decideColumn, toOverlaySpace } from "./callouts";
+import {
+  CENTER_TOLERANCE_PX,
+  type Rect,
+  buildLeaderPath,
+  decideColumn,
+  insertByCreatedAt,
+  overflow,
+  shouldEndSecondPhase,
+  toOverlaySpace,
+} from "./callouts";
 
 describe("toOverlaySpace", () => {
   it("globeRect と overlayRect が同じ位置なら座標はそのまま", () => {
@@ -52,11 +61,89 @@ describe("decideColumn (列振り分けの座標系バグ回帰テスト)", () =
     expect(decideColumn(200, globeWidth)).toBe("left");
   });
 
-  it("ちょうど中心は左列 (境界値)", () => {
-    expect(decideColumn(450, 900)).toBe("left");
+  it("ちょうど中心は右列", () => {
+    expect(decideColumn(450, 900)).toBe("right");
   });
 
-  it("projectedX が null (ピンが見つからない) なら左列にフォールバックする", () => {
-    expect(decideColumn(null, 900)).toBe("left");
+  it("null は右列", () => {
+    expect(decideColumn(null, 900)).toBe("right");
+  });
+
+  it("中心から左に 16px 未満は右列", () => {
+    const globeWidth = 900;
+    // 中心は 450。CENTER_TOLERANCE_PX (16) 未満しか離れていない → 右列。
+    expect(decideColumn(450 - (CENTER_TOLERANCE_PX - 1), globeWidth)).toBe("right");
+  });
+
+  it("中心から左に 16px 以上離れていれば左列", () => {
+    const globeWidth = 900;
+    expect(decideColumn(450 - CENTER_TOLERANCE_PX - 1, globeWidth)).toBe("left");
+  });
+});
+
+describe("insertByCreatedAt (createdAt 降順を保った挿入)", () => {
+  type Item = { readonly id: string; readonly createdAt: number };
+
+  it("最も古い要素を挿入すると末尾に入る", () => {
+    const column: readonly Item[] = [
+      { id: "a", createdAt: 300 },
+      { id: "b", createdAt: 200 },
+    ];
+    const result = insertByCreatedAt(column, { id: "c", createdAt: 100 });
+    expect(result.map((item) => item.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("最も新しい要素を挿入すると先頭に入る", () => {
+    const column: readonly Item[] = [
+      { id: "a", createdAt: 300 },
+      { id: "b", createdAt: 200 },
+    ];
+    const result = insertByCreatedAt(column, { id: "c", createdAt: 400 });
+    expect(result.map((item) => item.id)).toEqual(["c", "a", "b"]);
+  });
+
+  it("中間の要素を挿入すると該当する位置に入る", () => {
+    const column: readonly Item[] = [
+      { id: "a", createdAt: 300 },
+      { id: "b", createdAt: 100 },
+    ];
+    const result = insertByCreatedAt(column, { id: "c", createdAt: 200 });
+    expect(result.map((item) => item.id)).toEqual(["a", "c", "b"]);
+  });
+
+  it("元の配列を変更しない", () => {
+    const column: readonly Item[] = [{ id: "a", createdAt: 300 }];
+    insertByCreatedAt(column, { id: "b", createdAt: 100 });
+    expect(column.map((item) => item.id)).toEqual(["a"]);
+  });
+});
+
+describe("overflow (最大件数を超えた分の取得)", () => {
+  it("上限以内なら空配列を返す", () => {
+    expect(overflow([1, 2], 3)).toEqual([]);
+  });
+
+  it("上限を超えた分 (末尾、最も古いもの) を返す", () => {
+    expect(overflow([1, 2, 3, 4], 3)).toEqual([4]);
+  });
+});
+
+describe("shouldEndSecondPhase (2nd phase 終了判定)", () => {
+  const globeWidth = 900;
+
+  it("非表示になった場合、終了する", () => {
+    expect(shouldEndSecondPhase(300, false, globeWidth)).toBe(true);
+  });
+
+  it("projectedX が null の場合、終了する", () => {
+    expect(shouldEndSecondPhase(null, true, globeWidth)).toBe(true);
+  });
+
+  it("中心 (globeWidth/2) 以上に達した場合、終了する", () => {
+    expect(shouldEndSecondPhase(450, true, globeWidth)).toBe(true);
+  });
+
+  it("表示中かつ中心より左にいる場合、終了しない", () => {
+    expect(shouldEndSecondPhase(300, true, globeWidth)).toBe(false);
   });
 });
