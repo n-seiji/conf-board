@@ -30,6 +30,13 @@ const RIPPLE_SURFACE_OFFSET = 1.002;
 /** 描画するピンの上限。display 側の snapshot スライスにも同じ値を使う (`MAX_PIN_MESHES` を import)。 */
 export const MAX_PIN_MESHES = 200;
 const CAMERA_FOV = 25;
+/**
+ * カメラから球の中心までの距離。球が canvas の短辺の約 75% に収まるようにする
+ * (5 だと 90% になり、縁に立つ 3D ピンの頭が canvas の外にはみ出て切れる)。
+ */
+const CAMERA_DISTANCE = 6;
+/** 球の直径が canvas の短辺に占める割合 (透視投影: 1 / (距離 × tan(fov/2)))。 */
+const SPHERE_SCREEN_FRACTION = 1 / (CAMERA_DISTANCE * Math.tan((CAMERA_FOV / 2) * (Math.PI / 180)));
 const RIPPLE_DURATION_MS = 900;
 const RIPPLE_INNER_START = 0.04;
 const RIPPLE_OUTER_START = 0.3;
@@ -152,7 +159,7 @@ const createRippleMeshes = (): readonly [Mesh, Mesh] => {
 export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}): GlobeHandle => {
   const scene = new Scene();
   const camera = new PerspectiveCamera(CAMERA_FOV, 1, 0.1, 100);
-  camera.position.set(0, 0, 5);
+  camera.position.set(0, 0, CAMERA_DISTANCE);
 
   const renderer = new WebGLRenderer({
     antialias: true,
@@ -427,9 +434,9 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
           setAutoRotate(false);
           for (const cb of pinPickedCallbacks) cb(id);
         },
-        // 見かけ上の球の直径 (px)。透視投影の厳密な射影計算まではせず、
-        // コンテナの短辺の 9 割程度を球の直径とみなす近似で十分な操作感が得られる。
-        diameterPx: () => Math.min(container.clientWidth, container.clientHeight) * 0.9,
+        // 見かけ上の球の直径 (px)。カメラ距離と fov から求めた短辺に対する割合を使う。
+        diameterPx: () =>
+          Math.min(container.clientWidth, container.clientHeight) * SPHERE_SCREEN_FRACTION,
         onActivity: () => idleResume?.touch(),
       })
     : null;

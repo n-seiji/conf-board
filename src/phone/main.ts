@@ -479,7 +479,8 @@ const saveArrivedImage = async (
   ctx.font = "900 56px 'M PLUS Rounded 1c', sans-serif";
   ctx.fillText(`${countryName}に届きました!`, size / 2, 120);
 
-  const globeSize = 420;
+  // 球は canvas の約 75% なので、以前 (420px × 90%) と同じ大きさで描くために広めに取る。
+  const globeSize = 500;
   if (globeCanvas) {
     ctx.save();
     ctx.beginPath();

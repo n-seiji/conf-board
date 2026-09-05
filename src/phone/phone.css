@@ -322,8 +322,9 @@
 }
 
 .phone-arrived-globe {
-  width: 240px;
-  height: 240px;
+  /* 球は canvas の約 75% (カメラ距離で決まる) なので、以前の 240px と同じ見た目になるよう広げる。 */
+  width: 288px;
+  height: 288px;
   border-radius: 50%;
   overflow: hidden;
   margin: 4px 0 16px;
