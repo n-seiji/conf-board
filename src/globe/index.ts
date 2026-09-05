@@ -40,8 +40,19 @@ const CAMERA_FOV = 25;
  * (5 だと 90% になり、縁に立つ 3D ピンの頭が canvas の外にはみ出て切れる)。
  */
 const CAMERA_DISTANCE = 6;
-/** 球の直径が canvas の短辺に占める割合 (透視投影: 1 / (距離 × tan(fov/2)))。 */
-const SPHERE_SCREEN_FRACTION = 1 / (CAMERA_DISTANCE * Math.tan((CAMERA_FOV / 2) * (Math.PI / 180)));
+/** 半分の視野角 (rad)。透視投影の画面占有率の計算で使う。 */
+const HALF_FOV_RAD = (CAMERA_FOV / 2) * (Math.PI / 180);
+/**
+ * 球の直径が canvas の短辺に占める割合を、カメラ距離 (ズームで変化する) から求める
+ * (透視投影: 1 / (距離 × tan(fov/2)))。ズームで距離が縮むほど、球は画面に大きく映る。
+ */
+const sphereScreenFraction = (distance: number): number => 1 / (distance * Math.tan(HALF_FOV_RAD));
+/** ズーム倍率の範囲。1 (既定) より外へは縮小させず (`never zoom out beyond the default`)、
+ * 2.5 倍で画面いっぱいに特定の地域が映る程度を上限にする。 */
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 2.5;
+/** 自転再開後、ズームを既定 (1倍) へ戻す速さ (`settleTilt` と同じ考え方)。 */
+const ZOOM_SETTLE_RATE = 3;
 const RIPPLE_DURATION_MS = 900;
 const RIPPLE_INNER_START = 0.04;
 const RIPPLE_OUTER_START = 0.3;
@@ -146,6 +157,13 @@ export type GlobeHandle = Readonly<{
   onAutoRotateChange: (cb: (enabled: boolean) => void) => () => void;
   /** ピンがクリック/タップで選ばれるたびに呼ばれる購読を登録する。解除関数を返す。 */
   onPinPicked: (cb: (id: string) => void) => () => void;
+  /**
+   * ズーム倍率を直接設定する (1 = 既定, 最大 2.5)。ピンチ操作や ctrl+ホイールから
+   * `zoomBy` 経由で呼ばれるほか、外部からも直接呼べる。範囲外の値は自動でクランプする。
+   * 自転が再開すると (`autoRotate: true` の間) 毎フレーム既定倍率 (1) へ指数関数的に戻る
+   * (`tick` 内、`settleTilt` と同じ考え方)。
+   */
+  setZoom: (zoom: number) => void;
 }>;
 
 /** 手動操作が止んでから自転を再開するまでのアイドル時間 (ms)。 */
@@ -208,6 +226,17 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
   const pinMeta = new Map<string, PinMeta>();
   const pinOrder: string[] = [];
   const frameCallbacks = new Set<(elapsedSec: number) => void>();
+
+  /** 現在のズーム倍率 (1 = 既定)。カメラ距離は `CAMERA_DISTANCE / zoom` (ズームが大きいほど近づく)。 */
+  let zoom = 1;
+  const currentCameraDistance = (): number => CAMERA_DISTANCE / zoom;
+  const applyZoomToCamera = (): void => {
+    camera.position.z = currentCameraDistance();
+  };
+  const setZoom = (nextZoom: number): void => {
+    zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+    applyZoomToCamera();
+  };
 
   const resize = (): void => {
     const width = container.clientWidth || 1;
@@ -394,6 +423,11 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     rig.tick(dt, now);
     updateLanding(now);
     updateRipples(now);
+    // 自転中のみ、ズームを既定 (1倍) へ指数関数的に戻す (`GlobeRig.settleTilt` と同じ考え方)。
+    if (rig.autoRotate && zoom !== MIN_ZOOM) {
+      const factor = 1 - Math.exp(-dt * ZOOM_SETTLE_RATE);
+      setZoom(zoom + (MIN_ZOOM - zoom) * factor);
+    }
     renderer.render(scene, camera);
 
     for (const cb of frameCallbacks) cb(now / 1000);
@@ -503,9 +537,11 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
           setAutoRotate(false);
           for (const cb of pinPickedCallbacks) cb(id);
         },
-        // 見かけ上の球の直径 (px)。カメラ距離と fov から求めた短辺に対する割合を使う。
+        // 見かけ上の球の直径 (px)。現在のカメラ距離 (ズーム後) と fov から求めた短辺に対する割合を使う。
         diameterPx: () =>
-          Math.min(container.clientWidth, container.clientHeight) * SPHERE_SCREEN_FRACTION,
+          Math.min(container.clientWidth, container.clientHeight) *
+          sphereScreenFraction(currentCameraDistance()),
+        zoomBy: (factor) => setZoom(zoom * factor),
         onActivity: () => idleResume?.touch(),
       })
     : null;
@@ -544,5 +580,6 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     setAutoRotate,
     onAutoRotateChange,
     onPinPicked,
+    setZoom,
   };
 };

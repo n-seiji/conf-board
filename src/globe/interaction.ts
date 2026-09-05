@@ -35,14 +35,19 @@ export const dragDeltaToRotation = (
 
 /**
  * ホイール/トラックパッドスクロール量 (px 相当) を回転量に変換する。
- * マッピングはドラッグと同じだが、誤操作で回りすぎないよう `WHEEL_SCALE` で減衰する。
+ * マッピングの向きはドラッグの逆になる。macOS の「ナチュラルスクロール」では、
+ * 2本指で右方向にスワイプすると `deltaX` は負の値で届く (コンテンツを指で押し出す
+ * 感覚のため)。ドラッグと同じ「指の動きに表面が追随する」操作感にするには、
+ * その符号を反転させて `dragDeltaToRotation` に渡す必要がある
+ * (反転しないと、右にスワイプしたのに表面が左に流れる「感覚と真逆」の動きになる)。
+ * マッピングの大きさはドラッグと同じだが、誤操作で回りすぎないよう `WHEEL_SCALE` で減衰する。
  */
 export const wheelDeltaToRotation = (
   deltaX: number,
   deltaY: number,
   globeDiameterPx: number,
 ): DragRotation => {
-  const base = dragDeltaToRotation(deltaX, deltaY, globeDiameterPx);
+  const base = dragDeltaToRotation(-deltaX, -deltaY, globeDiameterPx);
   return { spin: base.spin * WHEEL_SCALE, tilt: base.tilt * WHEEL_SCALE };
 };
 
@@ -167,7 +172,32 @@ export type GlobeInteractionHandlers = Readonly<{
   diameterPx: () => number;
   /** ドラッグ/ホイール操作があるたびに呼ぶ (自転の一時停止/再開の起点)。 */
   onActivity: () => void;
+  /** ズーム倍率に `factor` を掛ける (`index.ts` の `setZoom(zoom * factor)` への橋渡し)。 */
+  zoomBy: (factor: number) => void;
 }>;
+
+/**
+ * トラックパッドのピンチ操作を ctrl+wheel として届ける Chrome/Safari の `deltaY` を、
+ * ズーム倍率の乗数に変換する純粋関数。指を広げる (ズームイン) と `deltaY` は負になるため、
+ * その場合は `factor > 1` (拡大) を返す。
+ */
+const PINCH_SENSITIVITY = 0.01;
+export const pinchDeltaToZoomFactor = (deltaY: number): number =>
+  Math.exp(-deltaY * PINCH_SENSITIVITY);
+
+/**
+ * タッチのピンチ操作 (2本指の距離の変化) をズーム倍率の乗数に変換する純粋関数。
+ * 前回の距離に対する今回の距離の比をそのまま倍率として使う
+ * (指が離れる = 距離が伸びる = 拡大)。`prevDist` が 0 以下の異常値なら倍率 1 (変化なし) を返す。
+ */
+export const pinchZoomFactor = (prevDist: number, dist: number): number =>
+  prevDist > 0 ? dist / prevDist : 1;
+
+/** 2 点間のユークリッド距離。 */
+const distanceBetween = (
+  a: Readonly<{ x: number; y: number }>,
+  b: Readonly<{ x: number; y: number }>,
+): number => Math.hypot(b.x - a.x, b.y - a.y);
 
 /** カーソル形状 (`[data-hover-pin]` セレクタ) の更新を rAF に合わせて間引くためのフラグ。 */
 const scheduleHoverUpdate = (
@@ -214,7 +244,34 @@ export const bindGlobeInteraction = (
   let pickedAtDown: string | null = null;
   const hoverScheduled = { pending: false };
 
+  /**
+   * 現在押下中のポインタ (pointerId → 座標)。2 本指がそろったらピンチとみなし、
+   * その間は回転もクリックも行わずズームだけを行う。1 本指に減ったら、残った指の
+   * 現在位置からドラッグを再開する (瞬間移動して見えないよう `lastX/lastY` をそこに合わせる)。
+   */
+  const pointers = new Map<number, Readonly<{ x: number; y: number }>>();
+  let pinching = false;
+  let prevPinchDist = 0;
+
   const onPointerDown = (event: PointerEvent): void => {
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    // 合成イベントや一部ブラウザでは有効なポインタが無く例外になるため、失敗しても続行する。
+    try {
+      element.setPointerCapture(event.pointerId);
+    } catch {
+      // キャプチャ無しでも要素上のドラッグは動くので無視する
+    }
+
+    if (pointers.size === 2) {
+      dragging = false;
+      pinching = true;
+      const [p1, p2] = [...pointers.values()];
+      if (p1 && p2) prevPinchDist = distanceBetween(p1, p2);
+      handlers.onActivity();
+      return;
+    }
+    if (pointers.size !== 1 || pinching) return;
+
     dragging = true;
     downX = event.clientX;
     downY = event.clientY;
@@ -223,15 +280,24 @@ export const bindGlobeInteraction = (
     pickedAtDown = handlers.pickPinAt(downX, downY);
     // 指/マウスが触れた瞬間に自転を止める (pointerup まで待つと動いてしまうため)。
     handlers.onActivity();
-    // 合成イベントや一部ブラウザでは有効なポインタが無く例外になるため、失敗しても続行する。
-    try {
-      element.setPointerCapture(event.pointerId);
-    } catch {
-      // キャプチャ無しでも要素上のドラッグは動くので無視する
-    }
   };
 
   const onPointerMove = (event: PointerEvent): void => {
+    if (pointers.has(event.pointerId)) {
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+
+    if (pinching) {
+      if (pointers.size < 2) return;
+      const [p1, p2] = [...pointers.values()];
+      if (!p1 || !p2) return;
+      const dist = distanceBetween(p1, p2);
+      handlers.zoomBy(pinchZoomFactor(prevPinchDist, dist));
+      prevPinchDist = dist;
+      handlers.onActivity();
+      return;
+    }
+
     if (dragging) {
       const dx = event.clientX - lastX;
       const dy = event.clientY - lastY;
@@ -246,6 +312,24 @@ export const bindGlobeInteraction = (
   };
 
   const onPointerUp = (event: PointerEvent): void => {
+    pointers.delete(event.pointerId);
+
+    if (pinching) {
+      if (pointers.size >= 2) return; // まだ 2 本以上残っている (3本指以上だった場合)
+      pinching = false;
+      const [remaining] = [...pointers.values()];
+      if (remaining) {
+        // 残った指でドラッグを継続する。瞬間移動を避けるため現在位置を基準にし直す。
+        dragging = true;
+        downX = remaining.x;
+        downY = remaining.y;
+        lastX = remaining.x;
+        lastY = remaining.y;
+        pickedAtDown = null; // ピンチ直後の指上げをクリックとして誤検出しない
+      }
+      return;
+    }
+
     if (!dragging) return;
     dragging = false;
     if (isClick(downX, downY, event.clientX, event.clientY) && pickedAtDown) {
@@ -255,6 +339,14 @@ export const bindGlobeInteraction = (
 
   const onWheel = (event: WheelEvent): void => {
     event.preventDefault();
+    // Chrome/Safari はトラックパッドのピンチ操作を ctrl+wheel として届ける
+    // (物理的な ctrl キー押下と区別できないが、実用上はピンチとして扱って問題ない)。
+    // マウスの ctrl+ホイールでも同様にズームとして扱う。
+    if (event.ctrlKey) {
+      handlers.zoomBy(pinchDeltaToZoomFactor(event.deltaY));
+      handlers.onActivity();
+      return;
+    }
     const { spin, tilt } = wheelDeltaToRotation(event.deltaX, event.deltaY, handlers.diameterPx());
     handlers.rotateBy(spin, tilt);
     handlers.onActivity();

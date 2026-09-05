@@ -5,6 +5,8 @@ import {
   dragDeltaToRotation,
   isClick,
   nearestPinWithin,
+  pinchDeltaToZoomFactor,
+  pinchZoomFactor,
   wheelDeltaToRotation,
 } from "./interaction";
 
@@ -26,11 +28,22 @@ describe("dragDeltaToRotation", () => {
 });
 
 describe("wheelDeltaToRotation", () => {
-  it("ドラッグ換算に WHEEL_SCALE (0.6) を掛けた値になる", () => {
+  it("ドラッグ換算の符号を反転し WHEEL_SCALE (0.6) を掛けた値になる (ナチュラルスクロール対応)", () => {
     const drag = dragDeltaToRotation(100, 40, 200);
     const wheel = wheelDeltaToRotation(100, 40, 200);
-    expect(wheel.spin).toBeCloseTo(drag.spin * 0.6);
-    expect(wheel.tilt).toBeCloseTo(drag.tilt * 0.6);
+    expect(wheel.spin).toBeCloseTo(-drag.spin * 0.6);
+    expect(wheel.tilt).toBeCloseTo(-drag.tilt * 0.6);
+  });
+
+  it("2本指で右にスワイプ (ナチュラルスクロールで deltaX が負) すると spin は正 (指に表面が追随する)", () => {
+    // macOS のナチュラルスクロールでは、右スワイプは負の deltaX として届く。
+    const { spin } = wheelDeltaToRotation(-50, 0, 200);
+    expect(spin).toBeGreaterThan(0);
+  });
+
+  it("2本指で下にスワイプ (ナチュラルスクロールで deltaY が負) すると tilt はドラッグで下へ動かした場合と同じ正方向", () => {
+    const { tilt } = wheelDeltaToRotation(0, -50, 200);
+    expect(tilt).toBeGreaterThan(0);
   });
 });
 
@@ -121,5 +134,33 @@ describe("closestPointOnSegment (先端〜頭の線分に最も近い点)", () =
 
   it("線分の長さが 0 の場合、その点を返す", () => {
     expect(closestPointOnSegment(3, 4, 3, 4, 9, 9)).toEqual({ x: 3, y: 4 });
+  });
+});
+
+describe("pinchDeltaToZoomFactor (ctrl+ホイール/トラックパッドピンチ)", () => {
+  it("deltaY が負 (指を広げる/ズームイン) のとき factor は 1 より大きい", () => {
+    expect(pinchDeltaToZoomFactor(-50)).toBeGreaterThan(1);
+  });
+
+  it("deltaY が正 (指をつまむ/ズームアウト) のとき factor は 1 より小さい", () => {
+    expect(pinchDeltaToZoomFactor(50)).toBeLessThan(1);
+  });
+
+  it("deltaY が 0 のとき factor は 1 (変化なし)", () => {
+    expect(pinchDeltaToZoomFactor(0)).toBeCloseTo(1);
+  });
+});
+
+describe("pinchZoomFactor (タッチの2本指ピンチ)", () => {
+  it("距離が伸びた (指が離れた) 場合 1 より大きい倍率を返す", () => {
+    expect(pinchZoomFactor(100, 150)).toBeCloseTo(1.5);
+  });
+
+  it("距離が縮んだ (指がつまんだ) 場合 1 より小さい倍率を返す", () => {
+    expect(pinchZoomFactor(100, 50)).toBeCloseTo(0.5);
+  });
+
+  it("前回距離が 0 以下の異常値なら 1 (変化なし) を返す", () => {
+    expect(pinchZoomFactor(0, 50)).toBe(1);
   });
 });
