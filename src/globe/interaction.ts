@@ -114,6 +114,27 @@ export type PinScreenCandidate = Readonly<{
  * ピンの見た目 (現在は 3D コーン、将来的にキャラクター glTF に差し替え予定) に依存せず、
  * かつタッチ操作でも押しやすいよう画面上の距離だけで判定する。
  */
+/**
+ * 線分 AB 上で点 P に最も近い点を返す純粋関数。ピンは画面上では「先端 (球面上の点) から
+ * 頭までの線分」として見えるので、クリック位置とこの線分の距離でピンを選ぶのに使う
+ * (縁に立つピンは頭が先端から大きく突き出すため、先端だけで判定すると頭を押しても外れる)。
+ */
+export const closestPointOnSegment = (
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  px: number,
+  py: number,
+): Readonly<{ x: number; y: number }> => {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const lengthSq = abx * abx + aby * aby;
+  if (lengthSq === 0) return { x: ax, y: ay };
+  const t = Math.max(0, Math.min(1, ((px - ax) * abx + (py - ay) * aby) / lengthSq));
+  return { x: ax + abx * t, y: ay + aby * t };
+};
+
 export const nearestPinWithin = (
   candidates: readonly PinScreenCandidate[],
   px: number,

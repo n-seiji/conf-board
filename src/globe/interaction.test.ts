@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  closestPointOnSegment,
   createIdleResume,
   dragDeltaToRotation,
   isClick,
@@ -105,5 +106,20 @@ describe("nearestPinWithin", () => {
 
   it("候補が無ければ null を返す", () => {
     expect(nearestPinWithin([], 0, 0, 18)).toBeNull();
+  });
+});
+
+describe("closestPointOnSegment (先端〜頭の線分に最も近い点)", () => {
+  it("点が線分の途中の横にある場合、垂線の足を返す", () => {
+    expect(closestPointOnSegment(0, 0, 10, 0, 4, 3)).toEqual({ x: 4, y: 0 });
+  });
+
+  it("点が線分の延長上より先にある場合、端点にクランプされる", () => {
+    expect(closestPointOnSegment(0, 0, 10, 0, 15, 2)).toEqual({ x: 10, y: 0 });
+    expect(closestPointOnSegment(0, 0, 10, 0, -5, 2)).toEqual({ x: 0, y: 0 });
+  });
+
+  it("線分の長さが 0 の場合、その点を返す", () => {
+    expect(closestPointOnSegment(3, 4, 3, 4, 9, 9)).toEqual({ x: 3, y: 4 });
   });
 });

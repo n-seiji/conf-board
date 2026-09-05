@@ -16,8 +16,13 @@ import {
 } from "three";
 import { pinColorHex } from "../shared/colors";
 import type { Post } from "../shared/types";
-import { bindGlobeInteraction, createIdleResume, nearestPinWithin } from "./interaction";
-import { createPinObject, orientPinToNormal } from "./pin-mesh";
+import {
+  bindGlobeInteraction,
+  closestPointOnSegment,
+  createIdleResume,
+  nearestPinWithin,
+} from "./interaction";
+import { PIN_HEIGHT, createPinObject, orientPinToNormal } from "./pin-mesh";
 import { pinLatLon } from "./pins";
 import { DEFAULT_FOCUS_DURATION_MS, GlobeRig, TILT_DEG, latLonToVector3 } from "./rig";
 import { createWorldTexture } from "./world-texture";
@@ -139,7 +144,8 @@ export type GlobeHandle = Readonly<{
 /** 手動操作が止んでから自転を再開するまでのアイドル時間 (ms)。 */
 const IDLE_RESUME_MS = 5000;
 /** ピンのクリック/タップ判定半径 (px)。タッチでも押しやすいよう、実サイズより広めに取る。 */
-const PICK_RADIUS_PX = 18;
+/** クリック判定の半径 (px)。先端〜頭の線分からこの距離以内ならそのピンとみなす。 */
+const PICK_RADIUS_PX = 22;
 /** `centerPin` の既定所要時間 (ms)。到着演出の `focusPin` (900ms) より短くし、選択操作への応答性を優先する。 */
 const CENTER_PIN_DURATION_MS = 700;
 
@@ -393,18 +399,20 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     return () => frameCallbacks.delete(cb);
   };
 
+  /** world 座標をコンテナ基準の画面 px に投影する。 */
+  const toScreen = (worldPos: Vector3): Readonly<{ x: number; y: number }> => {
+    const ndc = worldPos.clone().project(camera);
+    const width = container.clientWidth || 1;
+    const height = container.clientHeight || 1;
+    return { x: (ndc.x * 0.5 + 0.5) * width, y: (1 - (ndc.y * 0.5 + 0.5)) * height };
+  };
+
   const projectPin = (id: string): ProjectedPin | null => {
     const pin = rig.getPin(id);
     const projected = rig.projectPin(id, BACKSIDE_DOT_THRESHOLD);
     if (!pin || !projected) return null;
 
-    const worldPos = pin.object.getWorldPosition(new Vector3());
-    const ndc = worldPos.clone().project(camera);
-    const width = container.clientWidth || 1;
-    const height = container.clientHeight || 1;
-    const x = (ndc.x * 0.5 + 0.5) * width;
-    const y = (1 - (ndc.y * 0.5 + 0.5)) * height;
-
+    const { x, y } = toScreen(pin.object.getWorldPosition(new Vector3()));
     return { x, y, visible: projected.visible, dot: projected.dot };
   };
 
@@ -433,12 +441,25 @@ export const createGlobe = (container: HTMLElement, options: GlobeOptions = {}):
     const rect = container.getBoundingClientRect();
     const px = clientX - rect.left;
     const py = clientY - rect.top;
+    // ピンは先端 (球面上) から頭 (法線方向に PIN_HEIGHT) までの線分として見えるので、
+    // クリック位置に最も近い線分上の点を候補座標にする (頭を押しても当たる)。
     const candidates = pinOrder
       .map((id) => {
         const projected = projectPin(id);
-        return projected
-          ? { id, x: projected.x, y: projected.y, visible: projected.visible }
-          : null;
+        const pin = rig.getPin(id);
+        if (!projected || !pin) return null;
+        const tip = pin.object.getWorldPosition(new Vector3());
+        const head = tip.clone().add(tip.clone().normalize().multiplyScalar(PIN_HEIGHT));
+        const headScreen = toScreen(head);
+        const nearest = closestPointOnSegment(
+          projected.x,
+          projected.y,
+          headScreen.x,
+          headScreen.y,
+          px,
+          py,
+        );
+        return { id, x: nearest.x, y: nearest.y, visible: projected.visible };
       })
       .filter((c): c is { id: string; x: number; y: number; visible: boolean } => c !== null);
     return nearestPinWithin(candidates, px, py, PICK_RADIUS_PX);
