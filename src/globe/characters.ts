@@ -13,6 +13,7 @@ const REN: CharacterOptions = {
   clips: ["Wave", "Bow", "Nod", "Jump", "Dance"],
   sizeMultiplier: 1.3,
   recolor: false,
+  logoMesh: "T-shirt_•_continuous_shoulders_and_sleeves",
   headBone: "Head",
   bodyBone: "Spine",
 };

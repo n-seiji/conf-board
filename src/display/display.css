@@ -254,9 +254,10 @@
 }
 
 .display-counter__brand {
-  font-size: 13px;
-  font-weight: 800;
-  opacity: 0.6;
+  display: block;
+  width: 120px;
+  height: auto;
+  filter: brightness(0) invert(1);
   margin-top: 12px;
 }
 

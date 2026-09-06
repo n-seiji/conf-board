@@ -1,19 +1,6 @@
 import { PIN_COLORS } from "../shared/colors";
 import type { Post } from "../shared/types";
 
-const loadImage = (src: string): Promise<HTMLImageElement> =>
-  new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      img
-        .decode()
-        .then(() => resolve(img))
-        .catch(() => resolve(img));
-    };
-    img.onerror = () => reject(new Error(`failed to load image: ${src}`));
-    img.src = src;
-  });
-
 const roundRect = (
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -67,7 +54,6 @@ export const saveArrivedImage = async (
   globeHost: HTMLElement | null,
 ): Promise<void> => {
   await document.fonts.ready;
-  const gopher = await loadImage("/gopher-surf.png");
   const globeCanvas = globeHost?.querySelector<HTMLCanvasElement>("canvas") ?? null;
 
   const mint = cssColor("--mint", "#5fcfbf");
@@ -88,7 +74,7 @@ export const saveArrivedImage = async (
   ctx.fillStyle = white;
   ctx.textAlign = "center";
   ctx.font = "900 56px 'M PLUS Rounded 1c', sans-serif";
-  ctx.fillText(`${countryName}に届きました!`, size / 2, 120);
+  ctx.fillText(`${countryName}に作りました!`, size / 2, 120);
 
   // 球は canvas の約 75% なので、以前 (420px × 90%) と同じ大きさで描くために広めに取る。
   const globeSize = 500;
@@ -123,12 +109,6 @@ export const saveArrivedImage = async (
   ctx.fillStyle = ink;
   ctx.font = "800 34px 'M PLUS Rounded 1c', sans-serif";
   wrapText(ctx, post.body, cardX + 32, cardY + 120, cardW - 64, 44);
-
-  const gopherW = 200;
-  const gopherH = (gopher.naturalHeight / gopher.naturalWidth) * gopherW;
-  ctx.globalCompositeOperation = "multiply";
-  ctx.drawImage(gopher, size - gopherW - 40, cardY - gopherH + 30, gopherW, gopherH);
-  ctx.globalCompositeOperation = "source-over";
 
   ctx.textAlign = "center";
   ctx.fillStyle = white;

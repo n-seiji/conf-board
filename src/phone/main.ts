@@ -153,7 +153,6 @@ const renderForm = (errorMessage?: string): HTMLElement => {
       <p class="phone-error"></p>
     </form>
     <button type="submit" form="phone-form" class="phone-submit">世界に届ける</button>
-    <img class="phone-gopher" src="/gopher-surf.png" alt="" />
     <div class="phone-footer">
       <p>miive</p>
     </div>
@@ -232,7 +231,6 @@ const renderSending = (): HTMLElement => {
           <p class="phone-send-card__nickname"></p>
           <p class="phone-send-card__body"></p>
         </div>
-        <img class="phone-send-gopher" src="/gopher-surf.png" alt="" />
         <svg class="phone-splash-svg" viewBox="0 0 160 60" fill="none">
           <path d="M10 40 Q 40 10 70 35 T 150 30" />
           <path d="M0 48 Q 45 20 80 45 T 160 40" />
@@ -296,9 +294,9 @@ const renderArrived = (): HTMLElement => {
     <div class="phone-arrived">
       <h1 class="phone-arrived-heading">
         <span class="phone-arrived-heading__part phone-arrived-heading__country"></span>
-        <span class="phone-arrived-heading__part">届きました!</span>
+        <span class="phone-arrived-heading__part">作りました!</span>
       </h1>
-      <p class="phone-arrived-seq">あなたの願いは ${seq} 番目の願いです</p>
+      <p class="phone-arrived-seq">あなたの投稿は ${seq} 番目の投稿です</p>
       <p class="phone-arrived-color">
         あなたの色: <span class="phone-arrived-color__dot"></span><span class="phone-arrived-color__name"></span>
       </p>
@@ -314,9 +312,8 @@ const renderArrived = (): HTMLElement => {
         </button>
         <p class="phone-error"></p>
       </div>
-      <button type="button" class="phone-again-link">もう一度願う →</button>
+      <button type="button" class="phone-again-link">もう一度投稿する →</button>
     </div>
-    <img class="phone-arrived-gopher" src="/gopher-surf.png" alt="" />
   `;
 
   const countryEl = screenEl.querySelector<HTMLSpanElement>(".phone-arrived-heading__country");
@@ -351,8 +348,8 @@ const renderArrived = (): HTMLElement => {
     .querySelector<HTMLButtonElement>(".phone-action-share")
     ?.addEventListener("click", () => {
       if (!post) return;
-      const text = `「${post.body}」— #GoConference のブースで ${countryName} に願いを届けました! #miive`;
-      const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+      const text = `「${post.body}」 #miive のブースで ${countryName} に新しい福利厚生を作り、働く意味で世界を満たしました! #gocon #gocon26`;
+      const url = `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`;
       window.open(url, "_blank", "noopener");
     });
 

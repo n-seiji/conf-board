@@ -16,6 +16,7 @@ import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 import { createPinObject, PIN_HEIGHT } from "./pin-mesh";
 import { fnv1a32 } from "./pins";
+import { recolorRenLogo } from "./ren-logo-material";
 
 const MODEL_HEIGHT = 2.844;
 const CLIPS = ["Dance", "Wave", "Hop"] as const;
@@ -50,6 +51,7 @@ export type CharacterOptions = Readonly<{
   clips?: readonly string[];
   sizeMultiplier?: number;
   recolor?: boolean;
+  logoMesh?: string;
   headBone?: string;
   bodyBone?: string;
 }>;
@@ -132,6 +134,15 @@ export const createCharacterPins = (load: () => Promise<GLTF>, options: Characte
     model.traverse((o) => {
       if (!(o instanceof Mesh)) return;
       const colorize = (m: Material): Material => {
+        if (o.name === options.logoMesh) {
+          let copy = owned.get(m);
+          if (!copy) {
+            copy = recolorRenLogo(m, pin.color);
+            owned.set(m, copy);
+            pin.materials.add(copy);
+          }
+          return copy;
+        }
         if (
           options.recolor === false ||
           m.name !== "BodyColor" ||

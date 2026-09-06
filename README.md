@@ -1,6 +1,6 @@
 # conf-board
 
-Go カンファレンスのブース展示用アプリ (miive)。参加者がスマホから「福利厚生の願い」を
+Go カンファレンスのブース展示用アプリ (miive)。参加者がスマホから「気に入っている福利厚生や、ほしい福利厚生」を
 投稿すると、ブースのディスプレイに表示された自転する地球にピンとして届く。
 
 ## セットアップ
@@ -152,9 +152,3 @@ Hibernation API でリアルタイム配信する。
 
 - ユーザー入力 (ニックネーム・本文など) を DOM に描画するときは、必ず `textContent`
   を使う。`innerHTML` へユーザー入力を直接差し込むことは禁止 (XSS 対策)。
-
-## Gopher の帰属表記
-
-`/` の到着画面・画像保存機能で Gopher の画像 (`public/gopher-surf.png`) を使用。
-
-> The Go gopher was designed by Renee French. (CC BY 4.0, <https://blog.golang.org/gopher>)

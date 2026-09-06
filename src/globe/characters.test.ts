@@ -1,9 +1,57 @@
-import { describe, expect, it } from "vitest";
-import { Bone, Vector3, BoxGeometry, Group, Mesh, MeshBasicMaterial } from "three";
+import { describe, expect, it, vi } from "vitest";
+import {
+  Bone,
+  Vector3,
+  BoxGeometry,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  Color,
+  type WebGLRenderer,
+} from "three";
 import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { createRenPins, isRenPost } from "./characters";
 
 describe("Ren pins", () => {
+  it("colors each shirt logo independently without changing the shared face material", async () => {
+    const scene = new Group();
+    const material = new MeshBasicMaterial();
+    const shirt = new Mesh(new BoxGeometry(), material);
+    shirt.name = "T-shirt_•_continuous_shoulders_and_sleeves";
+    const face = new Mesh(shirt.geometry, material);
+    face.name = "Face";
+    scene.add(shirt, face);
+    const pins = createRenPins(async () => ({ scene, animations: [] }) as unknown as GLTF);
+    const red = pins.create("red", 0, "#ff0000");
+    await pins.ready;
+    const blue = pins.create("blue", 3, "#0000ff");
+    const logoMaterial = (pin: Group) =>
+      (pin.getObjectByName(shirt.name) as Mesh).material as MeshBasicMaterial;
+    const redMaterial = logoMaterial(red);
+    const blueMaterial = logoMaterial(blue);
+    expect(redMaterial).not.toBe(blueMaterial);
+    for (const [pin, expected] of [
+      [red, "ff0000"],
+      [blue, "0000ff"],
+    ] as const) {
+      expect((pin.getObjectByName("Face") as Mesh).material).toBe(material);
+      const shader = {
+        uniforms: {},
+        fragmentShader: "#include <map_fragment>",
+        vertexShader: "",
+      } as Parameters<typeof material.onBeforeCompile>[0];
+      logoMaterial(pin).onBeforeCompile(shader, {} as WebGLRenderer);
+      expect((shader.uniforms.renLogoColor!.value as Color).getHexString()).toBe(expected);
+      expect(shader.fragmentShader).toContain("mix(diffuseColor.rgb, renLogoColor, logoMask)");
+    }
+    const disposeRed = vi.spyOn(redMaterial, "dispose");
+    const disposeBlue = vi.spyOn(blueMaterial, "dispose");
+    pins.remove("red");
+    expect(disposeRed).toHaveBeenCalledOnce();
+    expect(disposeBlue).not.toHaveBeenCalled();
+    pins.dispose();
+    expect(disposeBlue).toHaveBeenCalledOnce();
+  });
   it("uses the persistent post sequence starting at 150, including restored posts", () => {
     expect([1, 149, 150, 151, 500].map((seq) => isRenPost(seq))).toEqual([
       false,

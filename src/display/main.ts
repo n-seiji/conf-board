@@ -68,8 +68,10 @@ const buildDom = (
   counter.className = "display-counter";
   counter.innerHTML = `
     <div class="display-counter__value"><span class="counter-n">0</span><span class="display-counter__total"> / ${CELEBRATION_THRESHOLD}</span></div>
-    <div class="display-counter__label">世界を満たした願い</div>
-    <div class="display-counter__brand">miive</div>
+    <div class="display-counter__label">働く意味で世界を満たした投稿</div>
+    <svg class="display-counter__brand" viewBox="687 495 625 134" role="img" aria-label="miive">
+      <image href="/miive-logo.png" width="1999" height="1125" />
+    </svg>
   `;
   stage.appendChild(counter);
   const counterValue = counter.querySelector<HTMLDivElement>(".counter-n");
@@ -224,7 +226,7 @@ const main = (): void => {
   const celebrate = (): void => {
     milestone.celebrate(performance.now());
     celebration.play();
-    showToast(`${CELEBRATION_THRESHOLD}の願いで世界が満たされました!`);
+    showToast(`${CELEBRATION_THRESHOLD}件の投稿で、働く意味が世界に広がりました!`);
   };
 
   let knownIds = new Set<string>();
