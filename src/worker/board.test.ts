@@ -375,3 +375,24 @@ describe("GET /api/ws", () => {
     ws.close();
   });
 });
+
+describe("country suggestions", () => {
+  const send = (countryId: unknown, clientId = crypto.randomUUID()) =>
+    SELF.fetch("http://example.com/api/posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nickname: "test", body: "書籍購入", clientId, countryId }),
+    });
+  it("persists the suggested country and preserves it on duplicate requests", async () => {
+    const clientId = crypto.randomUUID();
+    const first = await send(3, clientId);
+    expect(first.status).toBe(201);
+    const created = (await first.json()) as CreatePostResponse;
+    expect(created.post.countryId).toBe(3);
+    const duplicate = await send(11, clientId);
+    expect(((await duplicate.json()) as CreatePostResponse).post).toEqual(created.post);
+  });
+  it.each([-1, 20, 0.5, "3", null])("rejects invalid suggestion %s", async (id) => {
+    expect((await send(id)).status).toBe(400);
+  });
+});

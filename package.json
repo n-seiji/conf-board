@@ -15,7 +15,9 @@
     "check": "oxlint && oxfmt --check && tsc --noEmit && vitest run",
     "gen:regions": "tsx scripts/gen-regions.ts && oxfmt src/globe/regions.json",
     "format": "oxfmt",
-    "format:check": "oxfmt --check"
+    "format:check": "oxfmt --check",
+    "build:wasm": "node scripts/build-wasm.mjs",
+    "test:go": "cd wasm/country && go test ./..."
   },
   "dependencies": {
     "qrcode": "^1.5.4",
