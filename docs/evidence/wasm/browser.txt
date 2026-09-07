@@ -1,0 +1,8 @@
+UTC: 2026-09-07T08:32:45.291535+00:00
+Command: node scripts/check-country-browser.cjs
+Exit: 0
+
+PASS matched
+PASS unmatched
+PASS blocked
+PASS slow
