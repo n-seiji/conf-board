@@ -27,7 +27,7 @@ export default defineConfig({
         });
       },
     },
-    cloudflare(),
+    cloudflare({ viteEnvironment: { name: "worker" } }),
   ],
   environments: {
     client: {

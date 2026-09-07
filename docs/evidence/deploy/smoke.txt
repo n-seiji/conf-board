@@ -1,0 +1,13 @@
+UTC: 2026-09-07T08:32:34.205047+00:00
+Command: pnpm smoke http://127.0.0.1:4173
+Exit: 0
+
+
+> conf-board@0.1.0 smoke <worktree>
+> node scripts/smoke.mjs http://127.0.0.1:4173
+
+OK /
+OK /display
+OK /admin
+OK /api/posts
+OK /api/ws (snapshot)

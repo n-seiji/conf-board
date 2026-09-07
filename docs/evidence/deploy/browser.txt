@@ -1,0 +1,5 @@
+UTC: 2026-09-07T08:32:37.112879+00:00
+Command: node /tmp/conf-board-browser-evidence.cjs
+Exit: 0
+
+PASS phone / display / admin: HTTP 200, UI elements visible, no page errors
