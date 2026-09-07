@@ -152,3 +152,15 @@ Hibernation API でリアルタイム配信する。
 
 - ユーザー入力 (ニックネーム・本文など) を DOM に描画するときは、必ず `textContent`
   を使う。`innerHTML` へユーザー入力を直接差し込むことは禁止 (XSS 対策)。
+
+## Go / WebAssembly の国判定
+
+Go 1.24 以上が必要です。`pnpm dev` / `pnpm build` は Go の Wasm と同じツールチェーンの `wasm_exec.js` を自動生成します。`pnpm run test:go` で判定ロジックを検証できます。
+
+投稿送信時に Web Worker 内で本文のキーワードを判定し、既存20か国から投稿先を提案します。例: 「書籍購入を無制限にしたい」→「書籍無制限公国」。本文を外部AIに送らず、API費用はかかりません。意味理解や国名生成は行わず、否定表現も解釈しません。複数国が同点、該当なし、Wasm読み込み失敗、1.2秒を超えた場合は従来のランダム割り当てに戻ります。
+
+Wasmは独立したWorkerで実行し、判定後に終了します。生成物はViteがハッシュ付きURLで配信します。国候補はAPI側で整数・範囲を検証します。Chrome内蔵Geminiの提案は後続PRで扱います。
+
+デプロイ整備PRと合わせる際は、CIとデプロイの各ジョブにGoのセットアップと `pnpm run test:go` を追加してください。
+
+ブラウザ検証: ビルド後に `pnpm exec vite preview --host 127.0.0.1 --port 4174` を起動し、Playwrightが利用できる環境で `node scripts/check-country-browser.cjs` を実行します。必要に応じて `PLAYWRIGHT_MODULE` と `CHROME_PATH` を指定できます。ローカル環境に4件のテスト投稿を作り、正常判定・該当なし・Wasm通信失敗・タイムアウトを確認します。

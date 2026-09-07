@@ -236,7 +236,7 @@ export class Board extends DurableObject<Env> {
     }
 
     const id = crypto.randomUUID();
-    const countryId = Math.floor(Math.random() * COUNTRY_COUNT);
+    const countryId = result.output.countryId ?? Math.floor(Math.random() * COUNTRY_COUNT);
     const createdAt = Date.now();
 
     const { post, total } = this.ctx.storage.transactionSync(() => {

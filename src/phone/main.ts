@@ -1,3 +1,4 @@
+import { suggestCountry } from "./suggest-country";
 import * as v from "valibot";
 import { saveArrivedImage } from "./arrived-image";
 import { BoardAudio } from "../shared/audio";
@@ -260,12 +261,15 @@ const renderSending = (): HTMLElement => {
     });
   });
 
-  const apiCall = createPost({
-    nickname: lastForm.nickname,
-    body: lastForm.body,
-    clientId,
-    color: selectedColor,
-  });
+  const apiCall = suggestCountry(lastForm.body).then((countryId) =>
+    createPost({
+      nickname: lastForm.nickname,
+      body: lastForm.body,
+      clientId,
+      color: selectedColor,
+      countryId,
+    }),
+  );
 
   Promise.allSettled([animationDone, apiCall]).then(([, apiResult]) => {
     if (screen !== "sending") return;

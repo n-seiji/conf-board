@@ -1,0 +1,5 @@
+UTC: 2026-09-07T08:25:42.414264+00:00
+Command: go test ./...
+Exit: 0
+
+ok  	conf-board/country	0.465s

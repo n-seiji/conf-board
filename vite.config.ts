@@ -1,7 +1,11 @@
+import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { readFile } from "node:fs/promises";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { defineConfig } from "vite";
+
+// Build with the matching Go runtime for dev, build, and environment-specific deploys.
+execFileSync(process.execPath, ["scripts/build-wasm.mjs"], { stdio: "inherit" });
 
 export default defineConfig({
   server: { host: "127.0.0.1", port: 5173, strictPort: true },

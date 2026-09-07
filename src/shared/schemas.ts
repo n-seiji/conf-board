@@ -1,3 +1,4 @@
+import { COUNTRY_COUNT } from "./countries";
 import * as v from "valibot";
 import { DEFAULT_PIN_COLOR_ID, PIN_COLORS, type PinColorId } from "./colors";
 
@@ -53,6 +54,9 @@ export const createPostRequestSchema = v.object({
   body: bodySchema,
   clientId: v.pipe(v.string(), v.uuid("clientId が正しくありません")),
   color: v.optional(pinColorIdSchema, DEFAULT_PIN_COLOR_ID),
+  countryId: v.optional(
+    v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(COUNTRY_COUNT - 1)),
+  ),
 });
 
 export const createPostResponseSchema = v.object({

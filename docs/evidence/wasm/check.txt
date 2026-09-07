@@ -1,0 +1,20 @@
+UTC: 2026-09-07T08:25:41.213964+00:00
+Command: pnpm check
+Exit: 0
+
+
+> conf-board@0.1.0 check <worktree>
+> oxlint && oxfmt --check && tsc --noEmit && vitest run
+
+Checking formatting...
+
+All matched files use the correct format.
+Finished in 230ms on 107 files using 8 threads.
+
+ RUN  v4.1.11 <worktree>
+
+
+ Test Files  17 passed (17)
+      Tests  216 passed (216)
+   Start at  17:25:36
+   Duration  4.58s (transform 1.49s, setup 0ms, import 7.16s, tests 5.38s, environment 1ms)
