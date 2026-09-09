@@ -1,5 +1,6 @@
+import { showImageSaveDialog } from "./image-save-dialog";
 import * as v from "valibot";
-import { saveArrivedImage } from "./arrived-image";
+import { createArrivedImage } from "./arrived-image";
 import { BoardAudio } from "../shared/audio";
 import { type GlobeHandle, createGlobe } from "../globe/index";
 import { pinLatLon } from "../globe/pins";
@@ -237,7 +238,6 @@ const renderSending = (): HTMLElement => {
           <path d="M20 55 Q 55 30 90 52 T 155 50" />
         </svg>
       </div>
-      <p class="phone-sending-caption">いってきます!</p>
     </div>
   `;
 
@@ -312,7 +312,6 @@ const renderArrived = (): HTMLElement => {
         </button>
         <p class="phone-error"></p>
       </div>
-      <button type="button" class="phone-again-link">もう一度投稿する →</button>
     </div>
   `;
 
@@ -348,7 +347,7 @@ const renderArrived = (): HTMLElement => {
     .querySelector<HTMLButtonElement>(".phone-action-share")
     ?.addEventListener("click", () => {
       if (!post) return;
-      const text = `「${post.body}」 #miive のブースで ${countryName} に新しい福利厚生を作り、働く意味で世界を満たしました! #gocon #gocon26`;
+      const text = `「${post.body}」\n#miive のブースで ${countryName} に新しい福利厚生を作り、働く意味で世界を満たしました! #gocon #gocon26 @miive_jp`;
       const url = `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`;
       window.open(url, "_blank", "noopener");
     });
@@ -357,19 +356,19 @@ const renderArrived = (): HTMLElement => {
     .querySelector<HTMLButtonElement>(".phone-action-save")
     ?.addEventListener("click", async () => {
       if (!post) return;
+      const saveButton = screenEl.querySelector<HTMLButtonElement>(".phone-action-save");
+      if (saveButton) saveButton.disabled = true;
       if (errorHost) errorHost.textContent = "";
       try {
         arrivedGlobe?.render();
-        await saveArrivedImage(post, countryName, globeHost);
+        const file = await createArrivedImage(post, countryName, globeHost);
+        showImageSaveDialog(file);
       } catch {
         if (errorHost) errorHost.textContent = "画像の保存に失敗しました。もう一度お試しください。";
+      } finally {
+        if (saveButton) saveButton.disabled = false;
       }
     });
-
-  screenEl.querySelector<HTMLButtonElement>(".phone-again-link")?.addEventListener("click", () => {
-    lastForm = { nickname: "", body: "" };
-    goTo("form");
-  });
 
   return screenEl;
 };
