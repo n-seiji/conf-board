@@ -48,11 +48,11 @@ const cssColor = (varName: string, fallback: string): string => {
   return value || fallback;
 };
 
-export const saveArrivedImage = async (
+export const createArrivedImage = async (
   post: Post,
   countryName: string,
   globeHost: HTMLElement | null,
-): Promise<void> => {
+): Promise<File> => {
   await document.fonts.ready;
   const globeCanvas = globeHost?.querySelector<HTMLCanvasElement>("canvas") ?? null;
 
@@ -120,13 +120,5 @@ export const saveArrivedImage = async (
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) throw new Error("toBlob returned null");
 
-  const link = document.createElement("a");
-  const objectUrl = URL.createObjectURL(blob);
-  link.href = objectUrl;
-  link.download = `miive-${countryName}.png`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  // Safari では click() 直後に revoke するとダウンロードが失敗することがあるため遅延させる。
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  return new File([blob], `miive-${countryName}.png`, { type: "image/png" });
 };
