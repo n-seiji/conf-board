@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const [environment, option, ...extra] = process.argv.slice(2);
-const names = { staging: "conf-board-staging", production: "conf-board" };
-if (!Object.hasOwn(names, environment) || (option && option !== "--dry-run") || extra.length) {
-  throw new Error("Usage: pnpm run deploy <staging|production> [--dry-run]");
+const workerName = "conf-board";
+if (environment !== "production" || (option && option !== "--dry-run") || extra.length) {
+  throw new Error("Usage: pnpm run deploy production [--dry-run]");
 }
 const dryRun = option === "--dry-run";
 const run = (file, args, env = process.env) => {
@@ -19,8 +19,8 @@ const run = (file, args, env = process.env) => {
 run("node_modules/vite/bin/vite.js", ["build"], { ...process.env, CLOUDFLARE_ENV: environment });
 const configFile = "dist/worker/wrangler.json";
 const config = JSON.parse(await readFile(configFile, "utf8"));
-if (config.name !== names[environment]) {
-  throw new Error(`Refusing to deploy ${config.name}; expected ${names[environment]}`);
+if (config.name !== workerName) {
+  throw new Error(`Refusing to deploy ${config.name}; expected ${workerName}`);
 }
 const binding = config.durable_objects?.bindings?.find((entry) => entry.name === "BOARD");
 if (binding?.class_name !== "Board" || binding.script_name) {

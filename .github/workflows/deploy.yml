@@ -2,26 +2,19 @@ name: Deploy
 
 on:
   workflow_dispatch:
-    inputs:
-      environment:
-        description: Deploy target
-        required: true
-        type: choice
-        default: staging
-        options: [staging, production]
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy-${{ inputs.environment }}
+  group: deploy-production
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: ${{ inputs.environment }}
+    environment: production
     steps:
       - name: Check deployment configuration
         env:
@@ -56,13 +49,12 @@ jobs:
         run: go test ./...
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-      - name: Build and deploy selected environment
+      - name: Build and deploy production
         env:
-          TARGET_ENV: ${{ inputs.environment }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
-        run: pnpm run deploy "$TARGET_ENV"
+        run: pnpm run deploy production
       - name: Check deployed pages, API, and WebSocket
         env:
           DEPLOY_URL: ${{ vars.DEPLOY_URL }}

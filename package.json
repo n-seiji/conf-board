@@ -16,7 +16,6 @@
     "gen:regions": "tsx scripts/gen-regions.ts && oxfmt src/globe/regions.json",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "deploy:staging": "node scripts/deploy.mjs staging",
     "deploy:production": "node scripts/deploy.mjs production",
     "smoke": "node scripts/smoke.mjs",
     "types": "wrangler types --config wrangler.jsonc"

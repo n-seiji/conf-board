@@ -1,4 +1,4 @@
-UTC: 2026-09-07T08:23:55.281305+00:00
+UTC: 2026-09-09T03:36:03.284085+00:00
 Command: pnpm run deploy production --dry-run
 Exit: 0
 
@@ -15,9 +15,9 @@ Using secrets defined in process.env
 
 
 dist/worker/.vite/manifest.json   0.16 kB
-dist/worker/wrangler.json         1.69 kB
+dist/worker/wrangler.json         1.68 kB
 dist/worker/index.js             21.74 kB
-✓ built in 101ms
+✓ built in 105ms
 vite v6.4.3 building for production...
 transforming...
 ✓ 115 modules transformed.
@@ -523,7 +523,7 @@ dist/client/assets/index-CaJcsbN6.js                                         1,0
 - Using dynamic import() to code-split the application
 - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 796ms
+✓ built in 886ms
 
  ⛅️ wrangler 4.129.0
 ────────────────────

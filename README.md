@@ -39,82 +39,51 @@ pnpm check   # oxlint + oxfmt + tsc + vitest
 
 ## デプロイ
 
-Node.js 24 と `package.json` 指定の pnpm を使用します。GitHub Actions は `.node-version` と
-`packageManager` から同じバージョンを読み込みます。
+公開先は本番の `conf-board` のみです。ローカル開発では `conf-board-local` を使います。本番Worker名とDurable Objectの移行タグ `v1` を維持します。
 
-| 環境       | Worker名             | 投稿データ                |
-| ---------- | -------------------- | ------------------------- |
-| ローカル   | `conf-board-local`   | ローカルの Durable Object |
-| staging    | `conf-board-staging` | 検証専用の Durable Object |
-| production | `conf-board`         | 本番専用の Durable Object |
-
-`BOARD` はそれぞれの Worker 自身の `Board` を参照します。検証環境のリセットは本番へ影響しません。
-既存の本番 Worker 名 `conf-board` とマイグレーションタグ `v1` は維持しています。
+Node.js 24 と `package.json` 指定のpnpmを使用します。
 
 ### GitHub Actions の初回設定
 
-1. GitHub の **Settings → Environments** で `staging` と `production` を作成します。
-2. 各 environment に次の Secrets と Variables を登録します。
+1. GitHubの **Settings → Environments** で `production` を作成します。
+2. 次のSecretsとVariableを登録します。
 
-| 種類     | 名前                    | 内容                                                                                                                                     |
-| -------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Secret   | `CLOUDFLARE_API_TOKEN`  | 対象アカウントの Workers をデプロイできるAPIトークン。Cloudflare の「Edit Cloudflare Workers」テンプレートから作成                       |
-| Secret   | `CLOUDFLARE_ACCOUNT_ID` | 対象のCloudflareアカウントID                                                                                                             |
-| Secret   | `ADMIN_TOKEN`           | 管理画面用の長いランダムなトークン。環境ごとに別の値を設定                                                                               |
-| Variable | `DEPLOY_URL`            | 公開URL。例: staging は `https://conf-board-staging.<subdomain>.workers.dev`、production は `https://conf-board.<subdomain>.workers.dev` |
+| 種類     | 名前                    | 内容                                                      |
+| -------- | ----------------------- | --------------------------------------------------------- |
+| Secret   | `CLOUDFLARE_API_TOKEN`  | WorkersをデプロイできるAPIトークン                        |
+| Secret   | `CLOUDFLARE_ACCOUNT_ID` | CloudflareのAccount ID                                    |
+| Secret   | `ADMIN_TOKEN`           | 管理画面用の長いランダムなトークン                        |
+| Variable | `DEPLOY_URL`            | 本番URL。例: `https://conf-board.<subdomain>.workers.dev` |
 
-Cloudflare の Workers & Pages でアカウントの `workers.dev` サブドメインを確認してください。
-シークレットの値はリポジトリへコミットせず、GitHub の設定画面から入力します。
+3. workflowを `main` に反映します。手動実行ボタンはdefault branchにworkflowがある場合に表示されます。
+4. **Actions → Deploy → Run workflow** で公開するブランチを選びます。公開先はproduction固定です。
 
-3. ワークフローファイルを `main` に取り込みます。`workflow_dispatch` のボタンは、ワークフローが既定ブランチに存在してから利用できます。
-4. **Actions → Deploy → Run workflow** でブランチと `staging` を選択して実行します。
-5. staging の画面・投稿・リアルタイム表示を確認したら、同じリビジョンで `production` を実行します。
+PRとmainへのpushでは、CIが整形・Lint・型・テスト・本番のデプロイドライランを実行します。実公開は手動実行のみです。デプロイは直列実行します。
 
-PR と `main` へのpushでは `CI` が整形・Lint・型検査・全テストと、両環境のデプロイドライランを実行します。
-実際の公開は `Deploy` の手動実行だけです。同じ環境へのデプロイは並列実行しません。
-
-`Deploy` は設定の不足を確認し、チェック、対象環境のビルド、公開、HTTP/WebSocketの疎通確認を実行します。
-`ADMIN_TOKEN` は権限を制限した一時ファイルから `wrangler deploy --secrets-file` で公開と同時に登録し、実行後にファイルを削除します。
+Deployは設定確認・チェック・本番ビルド・公開・HTTP/API/WebSocket疎通を実行します。管理トークンは権限0600の一時ファイルでWranglerに渡し、終了時に削除します。
 
 ### ローカルからの実行
 
 ```bash
 pnpm exec wrangler login
-
-# 初回のみ。値は対話プロンプトで入力します。
-pnpm exec wrangler secret put ADMIN_TOKEN --config wrangler.jsonc --env staging
 pnpm exec wrangler secret put ADMIN_TOKEN --config wrangler.jsonc --env production
-
-# ビルド・生成設定・アップロード内容だけ確認 (公開しない)
-pnpm run deploy staging --dry-run
 pnpm run deploy production --dry-run
-
-# 環境を指定してビルドし、その成果物を公開
-pnpm run deploy:staging
 pnpm run deploy:production
-
-# 投稿を作成・削除せず、画面・API・WebSocket snapshotを確認
-pnpm smoke https://conf-board-staging.<subdomain>.workers.dev
+pnpm smoke https://conf-board.<subdomain>.workers.dev
 ```
 
-`pnpm deploy` はpnpm自身の組み込みコマンドです。このプロジェクトでは **`pnpm run deploy`**
-または `pnpm run deploy:staging` / `pnpm run deploy:production` を使います。
+`pnpm deploy` はpnpm自身のコマンドなので、`pnpm run deploy production` または `pnpm run deploy:production` を使います。
 
-[Cloudflare Vite pluginの環境選択](https://developers.cloudflare.com/workers/vite-plugin/reference/cloudflare-environments/)は
-ビルド時の `CLOUDFLARE_ENV` で決まります。`scripts/deploy.mjs` は毎回対象環境をビルドし、
-生成された Worker 名と `BOARD` の参照先を検査してから、その設定ファイルを指定して公開します。
-`pnpm build` の結果を手作業で別環境へ流用する必要はありません。
+[Cloudflare Vite pluginの環境選択](https://developers.cloudflare.com/workers/vite-plugin/reference/cloudflare-environments/)はビルド時の `CLOUDFLARE_ENV` で決まります。デプロイスクリプトはproductionを指定してビルドし、生成Worker名が `conf-board`、BOARDが自身のクラスを参照することを検査して公開します。
 
-Go/Wasmの変更を統合すると、`wasm/country/go.mod` の存在を検出してGoをセットアップし、GoテストもCI・デプロイの両方で実行します。
+Go/Wasm統合後は `wasm/country/go.mod` を検出してGoをセットアップし、GoテストもCI・Deployで実行します。
 
 ### 公開後の確認と復旧
 
-- 投稿ページ・`/display`・`/admin` が表示できること、スマホからの投稿がディスプレイへ届くことを確認します。
-- 管理画面では、その環境の `ADMIN_TOKEN` を使用します。
-- 疎通確認が失敗しても、直前の公開自体は完了している可能性があります。Actions の実行ログと公開URLを確認してください。
-- 不具合時は Cloudflare の Worker の Deployments 画面から既知の正常なバージョンへ戻すか、正常なリビジョンを選んで再デプロイします。
-  コードのロールバックは投稿データの復元ではありません。`/api/reset` はデプロイや復旧には使用しません。
-- SQLテーブルを変更する場合は `Board.migrate()` に移行処理を追加します。Durable Objectクラスの追加・改名などはWranglerの `migrations` に新しいタグを追加します。どちらもstagingで検証してから本番へ適用します。
+- 投稿ページ・ディスプレイ・管理画面と、投稿のリアルタイム反映を確認します。
+- 疎通確認に失敗しても公開自体は完了している場合があります。Actionsのログと本番URLを確認します。
+- 不具合時はCloudflareのDeployments画面から正常なバージョンへ戻すか、正常なリビジョンを再デプロイします。コードのロールバックは投稿データの復元ではありません。`/api/reset` は復旧に使用しません。
+- SQL変更は `Board.migrate()` に移行処理を追加し、クラスの追加・改名はWranglerの `migrations` に新しいタグを追加します。ローカルで検証してから本番へ適用します。
 
 ## 画面
 

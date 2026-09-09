@@ -19,14 +19,6 @@
     "enabled": true,
   },
   "env": {
-    "staging": {
-      "name": "conf-board-staging",
-      "workers_dev": true,
-      "secrets": { "required": ["ADMIN_TOKEN"] },
-      "durable_objects": {
-        "bindings": [{ "name": "BOARD", "class_name": "Board" }],
-      },
-    },
     "production": {
       "name": "conf-board",
       "workers_dev": true,
