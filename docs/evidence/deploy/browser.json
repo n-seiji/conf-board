@@ -1,0 +1,25 @@
+{
+  "utc": "2026-09-07T08:32:35.150Z",
+  "browser": "152.0.7977.82",
+  "scope": "Local built preview; no Cloudflare publish; admin login form only",
+  "pages": [
+    {
+      "path": "/",
+      "status": 200,
+      "pageErrors": [],
+      "screenshot": "phone.png"
+    },
+    {
+      "path": "/display",
+      "status": 200,
+      "pageErrors": [],
+      "screenshot": "display.png"
+    },
+    {
+      "path": "/admin",
+      "status": 200,
+      "pageErrors": [],
+      "screenshot": "admin.png"
+    }
+  ]
+}

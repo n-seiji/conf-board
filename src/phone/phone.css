@@ -1,0 +1,346 @@
+.phone-screen {
+  position: relative;
+  width: 100%;
+  min-height: 100dvh;
+  overflow: hidden;
+  padding-top: calc(24px + env(safe-area-inset-top));
+  padding-bottom: calc(48px + env(safe-area-inset-bottom));
+  padding-left: calc(20px + env(safe-area-inset-left));
+  padding-right: calc(20px + env(safe-area-inset-right));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.phone-brand {
+  font-size: 14px;
+  font-weight: 800;
+  opacity: 0.8;
+  margin: 0 0 18px;
+}
+
+.phone-heading {
+  font-size: 22px;
+  font-weight: 900;
+  text-align: center;
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+
+.phone-subtext {
+  font-size: 14px;
+  font-weight: 800;
+  opacity: 0.8;
+  text-align: center;
+  margin: 0 0 20px;
+}
+
+.phone-card {
+  width: 100%;
+  max-width: 350px;
+  background: var(--white);
+  color: var(--ink);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-soft);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.phone-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.phone-field label {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--mint-deep);
+}
+
+.phone-input,
+.phone-textarea {
+  border: none;
+  border-radius: 14px;
+  background: rgba(31, 58, 54, 0.06);
+  color: var(--ink);
+  padding: 12px 14px;
+  font-size: 16px;
+  font-weight: 800;
+  resize: none;
+}
+
+.phone-input::placeholder,
+.phone-textarea::placeholder {
+  color: rgba(31, 58, 54, 0.45);
+}
+
+.phone-input:focus,
+.phone-textarea:focus {
+  outline: 2px solid var(--mint);
+}
+
+.phone-textarea {
+  min-height: 96px;
+  line-height: 1.5;
+}
+
+.phone-counter {
+  align-self: flex-end;
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0.6;
+}
+
+.phone-color-swatches {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.phone-color-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--swatch-color);
+  border: 3px solid rgba(31, 58, 54, 0.12);
+  box-shadow: 0 2px 6px rgba(31, 58, 54, 0.2);
+  transition:
+    transform 150ms ease,
+    border-color 150ms ease;
+  padding: 0;
+}
+
+.phone-color-swatch[aria-pressed="true"] {
+  border-color: var(--white);
+  outline: 2px solid rgba(31, 58, 54, 0.2);
+  transform: scale(1.12);
+}
+
+.phone-error {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 0;
+}
+
+.phone-submit {
+  width: 100%;
+  max-width: 350px;
+  height: 56px;
+  border-radius: var(--radius-button);
+  background: var(--white);
+  color: var(--mint);
+  font-weight: 900;
+  font-size: 16px;
+  margin-top: 22px;
+  box-shadow: var(--shadow-soft);
+}
+
+.phone-submit:disabled {
+  opacity: 0.6;
+}
+
+.phone-footer {
+  margin-top: auto;
+  text-align: center;
+}
+
+.phone-footer p {
+  font-size: 10px;
+  font-weight: 800;
+  opacity: 0.6;
+  margin: 2px 0;
+}
+
+/* sending */
+
+.phone-sending {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.phone-sending-stage {
+  position: relative;
+  width: 100%;
+  max-width: 350px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.phone-send-card {
+  position: relative;
+  width: 100%;
+  background: var(--white);
+  color: var(--ink);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-soft);
+  padding: 20px 20px 20px 26px;
+  overflow: hidden;
+  transition:
+    transform 900ms cubic-bezier(0.3, 0, 0.6, 1),
+    opacity 900ms ease;
+}
+
+.phone-send-card__color-band {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+}
+
+.phone-send-card__nickname {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--mint-deep);
+  margin: 0 0 6px;
+}
+
+.phone-send-card__body {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.5;
+  margin: 0;
+  word-break: break-word;
+}
+
+.phone-send-launch .phone-send-card {
+  transform: translateY(-1100px) scale(1.08);
+  opacity: 0;
+}
+
+.phone-splash-svg {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 160px;
+  height: 60px;
+  pointer-events: none;
+}
+
+.phone-splash-svg path {
+  fill: none;
+  stroke: var(--white);
+  stroke-width: 3px;
+  stroke-linecap: round;
+  opacity: 0.6;
+  transition: opacity 700ms ease 200ms;
+}
+
+.phone-send-launch .phone-splash-svg path {
+  opacity: 0;
+}
+
+.phone-sending-caption {
+  margin-top: 28px;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+/* arrived */
+
+.phone-arrived {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.phone-arrived-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  column-gap: 0;
+  font-size: 24px;
+  font-weight: 900;
+  text-align: center;
+  margin: 8px 0 6px;
+  max-width: 320px;
+}
+
+.phone-arrived-heading__part {
+  white-space: nowrap;
+}
+
+.phone-arrived-seq {
+  font-size: 13px;
+  font-weight: 800;
+  opacity: 0.8;
+  margin: 0 0 6px;
+}
+
+.phone-arrived-color {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0.85;
+  margin: 0 0 12px;
+}
+
+.phone-arrived-color__dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--dot-color);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.phone-arrived-globe {
+  /* 球は canvas の約 75% (カメラ距離で決まる) なので、以前の 240px と同じ見た目になるよう広げる。 */
+  width: 288px;
+  height: 288px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin: 4px 0 16px;
+}
+
+.phone-arrived-actions {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.phone-action-button {
+  width: 100%;
+  height: 52px;
+  border-radius: var(--radius-button);
+  background: var(--white);
+  color: var(--ink);
+  font-weight: 900;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: var(--shadow-soft);
+}
+
+.phone-action-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.phone-again-link {
+  margin-top: 16px;
+  background: none;
+  color: var(--white);
+  font-size: 14px;
+  font-weight: 900;
+  opacity: 0.9;
+}

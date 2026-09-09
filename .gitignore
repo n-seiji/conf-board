@@ -1,10 +1,24 @@
-node_modules/
+node_modules
 dist/
 .wrangler/
 .dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.*
+!.env.example
 *.log
 .DS_Store
 
 # 設計キャンバス・使い捨てプロトタイプ (コミットしない)
 design-canvas/
 prototypes/
+
+# Playwright MCP が確認時に置く一時ファイル
+.playwright-mcp/
+
+# Blender autosaves and the superseded first character prototype
+*.blend1
+/assets/kurita-miive/
+
+docs/superpowers/

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ja">
+  <meta charset="utf-8" />
+  <title>Gopher integration check</title>
+  <link rel="stylesheet" href="/src/styles/gopher-credit.css" />
+  <link rel="stylesheet" href="/src/display/display.css" />
+  <small class="gopher-credit">The Go gopher was designed by Renee French.</small>
+  <style>
+    body {
+      --white: #fff;
+      --white-90: rgb(255 255 255 / 90%);
+      --ink: #173e39;
+      margin: 0;
+      background: #5fcfbf;
+      font: 16px system-ui;
+      color: #173e39;
+    }
+    #stage {
+      height: 90vh;
+      position: relative;
+    }
+    #globe {
+      position: absolute;
+      inset: 0;
+    }
+    #anchor {
+      position: absolute;
+      background: white;
+      padding: 10px;
+      border-radius: 12px;
+      pointer-events: none;
+      transform: translate(12px, -100%);
+    }
+    nav {
+      position: absolute;
+      z-index: 2;
+      padding: 16px;
+    }
+    button {
+      padding: 10px;
+      margin: 4px;
+    }
+    #status {
+      padding: 8px;
+      background: #fff;
+    }
+  </style>
+  <div id="stage">
+    <div id="globe"></div>
+    <nav>
+      <button id="arrive">NEW付きでワープ登場</button><button id="look">中央で腰を反らす</button
+      ><button id="resume">回転・ダンスに戻す</button>
+      <button id="bubble">吹き出しを切り替え</button>
+      <button id="celebrate">150投稿達成を再生</button>
+      <div id="status">準備完了（テスト用・投稿は保存しません）</div>
+    </nav>
+  </div>
+  <script type="module" src="./integration-preview-main.js"></script>
+</html>

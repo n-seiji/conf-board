@@ -1,0 +1,42 @@
+{
+  "model": {
+    "loaded": true,
+    "meshCount": 21,
+    "skinnedMeshCount": 21,
+    "animations": 5
+  },
+  "clips": [
+    {
+      "name": "Wave",
+      "duration": 3.200000047683716,
+      "movement": 0.9803026668047726,
+      "loopError": 0
+    },
+    {
+      "name": "Bow",
+      "duration": 2.799999952316284,
+      "movement": 0.6100238930628584,
+      "loopError": 0
+    },
+    {
+      "name": "Nod",
+      "duration": 2.4000000953674316,
+      "movement": 0.14681226238884398,
+      "loopError": 0
+    },
+    {
+      "name": "Jump",
+      "duration": 2.799999952316284,
+      "movement": 1.0674590313230041,
+      "loopError": 0
+    },
+    {
+      "name": "Dance",
+      "duration": 3.200000047683716,
+      "movement": 0.13698894442960285,
+      "loopError": 0
+    }
+  ],
+  "pauseResume": true,
+  "mobile": true
+}

@@ -1,0 +1,9 @@
+{
+  "bytes": 8017876,
+  "animations": ["Bow", "Dance", "Jump", "Nod", "Wave"],
+  "joints": 12,
+  "all_materials_unlit": true,
+  "embedded_textures": true,
+  "all_meshes_skinned": true,
+  "outline_hulls": false
+}

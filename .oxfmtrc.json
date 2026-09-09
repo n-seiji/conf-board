@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "all",
+  "ignorePatterns": [
+    "worker-configuration.d.ts",
+    "dist",
+    ".wrangler",
+    "node_modules",
+    "pnpm-lock.yaml",
+    ".playwright-mcp",
+    "assets/**/viewer*.html",
+    "assets/kurita-miive"
+  ]
+}

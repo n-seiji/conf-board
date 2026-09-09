@@ -1,0 +1,88 @@
+UTC: 2026-09-09T03:35:53.929401+00:00
+Command: pnpm check
+Exit: 0
+
+
+> conf-board@0.1.0 check <worktree>
+> oxlint && oxfmt --check && tsc --noEmit && vitest run
+
+Checking formatting...
+
+All matched files use the correct format.
+Finished in 233ms on 110 files using 8 threads.
+
+ RUN  v4.1.11 <worktree>
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+Using secrets defined in process.env
+▲ [WARNING] Missing required secrets: ADMIN_TOKEN. Add them to .dev.vars, .env, or set as environment variables.
+
+
+
+ Test Files  17 passed (17)
+      Tests  210 passed (210)
+   Start at  12:35:48
+   Duration  5.25s (transform 1.30s, setup 0ms, import 6.77s, tests 6.12s, environment 0ms)

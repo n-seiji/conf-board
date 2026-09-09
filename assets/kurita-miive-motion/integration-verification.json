@@ -1,0 +1,43 @@
+{
+  "models": [
+    {
+      "name": "ren-pin",
+      "meshes": 21,
+      "skins": 21,
+      "layer": 1,
+      "visible": true
+    },
+    {
+      "name": "gopher-pin",
+      "meshes": 8,
+      "skins": 8,
+      "layer": 1,
+      "visible": true
+    }
+  ],
+  "passes": [
+    17664, 17664, 17664, 17664, 17664, 17664, 17664, 17664, 17664, 17664, 17664, 17664, 17664,
+    17664, 17664, 17664, 17664, 17664, 17664, 17664, 17664, 17664, 17664, 17664, 17664, 17664,
+    17664, 17664, 17664, 17664
+  ],
+  "landed": true,
+  "projected": {
+    "x": 547.6440504064572,
+    "y": 492.0517736812246,
+    "visible": true,
+    "dot": 1,
+    "selected": false
+  },
+  "surfaceAlignment": 1,
+  "selectedUpright": true,
+  "clickDismissesNew": true,
+  "gopherClickDismissesNew": true,
+  "gopherSelectedUpright": true,
+  "deselectionRestoresNormal": true,
+  "crowd": {
+    "count": 40,
+    "unique": 40
+  },
+  "errors": [],
+  "restored": true
+}

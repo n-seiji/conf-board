@@ -1,0 +1,33 @@
+@import "@fontsource/m-plus-rounded-1c/800.css";
+@import "@fontsource/m-plus-rounded-1c/900.css";
+@import "./tokens.css";
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-display);
+  font-weight: 800;
+  background: linear-gradient(180deg, var(--mint) 0%, var(--mint-deep) 100%);
+  color: var(--white);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  cursor: pointer;
+}
+
+input,
+textarea {
+  font-family: inherit;
+}

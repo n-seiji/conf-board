@@ -1,0 +1,52 @@
+{
+  "name": "conf-board",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "node scripts/deploy.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "check": "oxlint && oxfmt --check && tsc --noEmit && vitest run",
+    "gen:regions": "tsx scripts/gen-regions.ts && oxfmt src/globe/regions.json",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "deploy:production": "node scripts/deploy.mjs production",
+    "smoke": "node scripts/smoke.mjs",
+    "types": "wrangler types --config wrangler.jsonc"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "three": "^0.169.0",
+    "topojson-client": "^3.1.0",
+    "valibot": "~1.4.2",
+    "world-atlas": "^2.0.2"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.2.3",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@fontsource/m-plus-rounded-1c": "^5.1.1",
+    "@types/qrcode": "^1.5.5",
+    "@types/three": "^0.169.0",
+    "@types/topojson-client": "^3.1.5",
+    "oxfmt": "^0.66.0",
+    "oxlint": "^1.81.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.7",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.4.0"
+  },
+  "packageManager": "pnpm@10.14.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd"
+    ]
+  }
+}
