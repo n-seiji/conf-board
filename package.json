@@ -7,7 +7,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "pnpm run build && wrangler deploy",
+    "deploy": "node scripts/deploy.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
@@ -15,7 +15,10 @@
     "check": "oxlint && oxfmt --check && tsc --noEmit && vitest run",
     "gen:regions": "tsx scripts/gen-regions.ts && oxfmt src/globe/regions.json",
     "format": "oxfmt",
-    "format:check": "oxfmt --check"
+    "format:check": "oxfmt --check",
+    "deploy:production": "node scripts/deploy.mjs production",
+    "smoke": "node scripts/smoke.mjs",
+    "types": "wrangler types --config wrangler.jsonc"
   },
   "dependencies": {
     "qrcode": "^1.5.4",

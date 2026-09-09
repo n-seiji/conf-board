@@ -1,8 +1,9 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "conf-board",
+  "name": "conf-board-local",
   "main": "src/worker/index.ts",
-  "compatibility_date": "2025-09-01",
+  "compatibility_date": "2026-08-22",
+  "secrets": { "required": ["ADMIN_TOKEN"] },
   "assets": {
     "directory": "./dist/client",
     "not_found_handling": "none",
@@ -16,5 +17,15 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Board"] }],
   "observability": {
     "enabled": true,
+  },
+  "env": {
+    "production": {
+      "name": "conf-board",
+      "workers_dev": true,
+      "secrets": { "required": ["ADMIN_TOKEN"] },
+      "durable_objects": {
+        "bindings": [{ "name": "BOARD", "class_name": "Board" }],
+      },
+    },
   },
 }

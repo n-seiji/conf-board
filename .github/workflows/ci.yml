@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Set up Go when Wasm is present
+        if: ${{ hashFiles('wasm/country/go.mod') != '' }}
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: wasm/country/go.mod
+          cache-dependency-path: wasm/country/go.mod
+      - name: Test Go country classification
+        if: ${{ hashFiles('wasm/country/go.mod') != '' }}
+        working-directory: wasm/country
+        run: go test ./...
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - name: Verify production deployment bundle
+        run: pnpm run deploy production --dry-run

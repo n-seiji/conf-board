@@ -39,10 +39,51 @@ pnpm check   # oxlint + oxfmt + tsc + vitest
 
 ## デプロイ
 
+公開先は本番の `conf-board` のみです。ローカル開発では `conf-board-local` を使います。本番Worker名とDurable Objectの移行タグ `v1` を維持します。
+
+Node.js 24 と `package.json` 指定のpnpmを使用します。
+
+### GitHub Actions の初回設定
+
+1. GitHubの **Settings → Environments** で `production` を作成します。
+2. 次のSecretsとVariableを登録します。
+
+| 種類     | 名前                    | 内容                                                      |
+| -------- | ----------------------- | --------------------------------------------------------- |
+| Secret   | `CLOUDFLARE_API_TOKEN`  | WorkersをデプロイできるAPIトークン                        |
+| Secret   | `CLOUDFLARE_ACCOUNT_ID` | CloudflareのAccount ID                                    |
+| Secret   | `ADMIN_TOKEN`           | 管理画面用の長いランダムなトークン                        |
+| Variable | `DEPLOY_URL`            | 本番URL。例: `https://conf-board.<subdomain>.workers.dev` |
+
+3. workflowを `main` に反映します。手動実行ボタンはdefault branchにworkflowがある場合に表示されます。
+4. **Actions → Deploy → Run workflow** で公開するブランチを選びます。公開先はproduction固定です。
+
+PRとmainへのpushでは、CIが整形・Lint・型・テスト・本番のデプロイドライランを実行します。実公開は手動実行のみです。デプロイは直列実行します。
+
+Deployは設定確認・チェック・本番ビルド・公開・HTTP/API/WebSocket疎通を実行します。管理トークンは権限0600の一時ファイルでWranglerに渡し、終了時に削除します。
+
+### ローカルからの実行
+
 ```bash
-npx wrangler secret put ADMIN_TOKEN
-pnpm deploy   # = vite build && wrangler deploy
+pnpm exec wrangler login
+pnpm exec wrangler secret put ADMIN_TOKEN --config wrangler.jsonc --env production
+pnpm run deploy production --dry-run
+pnpm run deploy:production
+pnpm smoke https://conf-board.<subdomain>.workers.dev
 ```
+
+`pnpm deploy` はpnpm自身のコマンドなので、`pnpm run deploy production` または `pnpm run deploy:production` を使います。
+
+[Cloudflare Vite pluginの環境選択](https://developers.cloudflare.com/workers/vite-plugin/reference/cloudflare-environments/)はビルド時の `CLOUDFLARE_ENV` で決まります。デプロイスクリプトはproductionを指定してビルドし、生成Worker名が `conf-board`、BOARDが自身のクラスを参照することを検査して公開します。
+
+Go/Wasm統合後は `wasm/country/go.mod` を検出してGoをセットアップし、GoテストもCI・Deployで実行します。
+
+### 公開後の確認と復旧
+
+- 投稿ページ・ディスプレイ・管理画面と、投稿のリアルタイム反映を確認します。
+- 疎通確認に失敗しても公開自体は完了している場合があります。Actionsのログと本番URLを確認します。
+- 不具合時はCloudflareのDeployments画面から正常なバージョンへ戻すか、正常なリビジョンを再デプロイします。コードのロールバックは投稿データの復元ではありません。`/api/reset` は復旧に使用しません。
+- SQL変更は `Board.migrate()` に移行処理を追加し、クラスの追加・改名はWranglerの `migrations` に新しいタグを追加します。ローカルで検証してから本番へ適用します。
 
 ## 画面
 
